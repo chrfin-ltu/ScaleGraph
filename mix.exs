@@ -6,7 +6,10 @@ defmodule ScaleGraphUmbrella.MixProject do
       apps_path: "apps",
       version: "0.1.0",
       start_permanent: Mix.env() == :prod,
-      deps: deps()
+      deps: deps(),
+
+      # Docs
+      name: "ScaleGraph",
     ]
   end
 
@@ -16,6 +19,8 @@ defmodule ScaleGraphUmbrella.MixProject do
   #
   # Run "mix help deps" for examples and options.
   defp deps do
-    []
+    [
+      {:ex_doc, "~> 0.38.4", only: :dev, runtime: false},
+    ]
   end
 end

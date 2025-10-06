@@ -37,14 +37,18 @@ defmodule ScaleGraph.RPC do
   use GenServer
 
   defstruct [
-    addr: nil,      # {IP, port} of this node
-    id: nil,        # ID (e.g. public key) of this node
-    net: nil,       # network
-    handler: nil,   # handler for incoming RPCs
+    # {IP, port} of this node
+    addr: nil,
+    # ID (e.g. public key) of this node
+    id: nil,
+    # network
+    net: nil,
+    # handler for incoming RPCs
+    handler: nil
   ]
 
   def start_link(opts) do
-    opts = Keyword.merge(opts, [handler: self()])
+    opts = Keyword.merge(opts, handler: self())
     GenServer.start_link(__MODULE__, opts)
   end
 
@@ -73,12 +77,14 @@ defmodule ScaleGraph.RPC do
     id = Keyword.fetch!(opts, :id)
     net = Keyword.fetch!(opts, :net)
     handler = Keyword.fetch!(opts, :handler)
+
     state = %__MODULE__{
       addr: addr,
       id: id,
       net: net,
-      handler: handler,
+      handler: handler
     }
+
     # TODO: Need to connect to the network! But which one?
     # Must generalize to different network implementations!
     Netsim.Fake.connect(net, addr)
@@ -139,12 +145,15 @@ defmodule ScaleGraph.RPC do
 
   @doc "Constructs a response message to the given RPC request."
   def response(rpc_request, data \\ nil)
+
   def response({:rpc_request, {:ping, _}} = rpc, _data) do
     new_response(rpc, nil)
   end
+
   def response({:rpc_request, {:find_nodes, _}} = rpc, data) do
     new_response(rpc, data)
   end
+
   def response(rpc, _data) do
     raise "cannot make response to unexpected RPC: #{inspect(rpc)}"
   end
@@ -155,6 +164,5 @@ defmodule ScaleGraph.RPC do
 
   # FIXME: Generate random. Need to know the number of bits (configurable).
   # May need to depend on the state, depending on how configurable.
-  defp generate_id(), do: 321456987
-
+  defp generate_id(), do: 321_456_987
 end

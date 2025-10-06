@@ -9,7 +9,7 @@ defmodule ScaleGraphUmbrella.MixProject do
       deps: deps(),
 
       # Docs
-      name: "ScaleGraph",
+      name: "ScaleGraph"
     ]
   end
 
@@ -20,7 +20,7 @@ defmodule ScaleGraphUmbrella.MixProject do
   # Run "mix help deps" for examples and options.
   defp deps do
     [
-      {:ex_doc, "~> 0.38.4", only: :dev, runtime: false},
+      {:ex_doc, "~> 0.38.4", only: :dev, runtime: false}
     ]
   end
 end

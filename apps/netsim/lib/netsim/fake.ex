@@ -4,9 +4,7 @@ defmodule Netsim.Fake do
   """
   use GenServer
 
-  defstruct [
-    nodes: nil,
-  ]
+  defstruct nodes: nil
 
   def start_link(opts) do
     GenServer.start_link(__MODULE__, opts)
@@ -21,6 +19,7 @@ defmodule Netsim.Fake do
   process per address.
   """
   def connect(net, destination, process \\ self())
+
   def connect(net, {_ip, _port} = dst, process) do
     GenServer.call(net, {:connect, dst, process})
   end
@@ -35,8 +34,9 @@ defmodule Netsim.Fake do
   @impl GenServer
   def init(_opts) do
     state = %__MODULE__{
-      nodes: %{},
+      nodes: %{}
     }
+
     {:ok, state}
   end
 
@@ -52,5 +52,4 @@ defmodule Netsim.Fake do
     Kernel.send(target, {:network, payload})
     {:noreply, state}
   end
-
 end

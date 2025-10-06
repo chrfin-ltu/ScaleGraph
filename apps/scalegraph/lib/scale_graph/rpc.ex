@@ -36,6 +36,8 @@ defmodule ScaleGraph.RPC do
   """
   use GenServer
 
+  @id_bits 32 # using a 32-bit ID for now
+
   defstruct [
     # {IP, port} of this node
     addr: nil,
@@ -95,6 +97,7 @@ defmodule ScaleGraph.RPC do
   def handle_cast({:request, typ, dst, data}, state) do
     rpc = new_request(typ, state.addr, dst, data)
     payload = encode(rpc)
+    # XXX
     Netsim.Fake.send(state.net, dst, payload)
     {:noreply, state}
   end
@@ -104,6 +107,7 @@ defmodule ScaleGraph.RPC do
     rpc = response(request, data)
     dst = dst(rpc)
     payload = encode(rpc)
+    # XXX
     Netsim.Fake.send(state.net, dst, payload)
     {:noreply, state}
   end
@@ -164,5 +168,5 @@ defmodule ScaleGraph.RPC do
 
   # FIXME: Generate random. Need to know the number of bits (configurable).
   # May need to depend on the state, depending on how configurable.
-  defp generate_id(), do: 321_456_987
+  defp generate_id(), do: Util.rand_bits(@id_bits)
 end

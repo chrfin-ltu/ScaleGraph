@@ -49,7 +49,7 @@ defmodule Netsim.Fake do
   @impl GenServer
   def handle_cast({:send, dst, payload}, state) do
     target = state.nodes[dst]
-    Kernel.send(target, payload)
+    Kernel.send(target, {:network, payload})
     {:noreply, state}
   end
 

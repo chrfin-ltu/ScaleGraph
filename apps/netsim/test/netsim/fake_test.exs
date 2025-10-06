@@ -7,7 +7,7 @@ defmodule Netsim.FakeTest do
     spawn(fn ->
       Netsim.Fake.send(net, {{127, 0, 0, 1}, 12345}, "hello")
     end)
-    assert_receive "hello"
+    assert_receive {:network, "hello"}
   end
 
   test "connect with inferred PID" do
@@ -16,7 +16,7 @@ defmodule Netsim.FakeTest do
     spawn(fn ->
       Netsim.Fake.send(net, {{127, 0, 0, 1}, 12345}, "hello")
     end)
-    assert_receive "hello"
+    assert_receive {:network, "hello"}
   end
 
   @tag skip: "TODO"
@@ -27,7 +27,7 @@ defmodule Netsim.FakeTest do
       Netsim.Fake.send(net, {{127, 127, 127, 127}, 0}, "hello")
       Netsim.Fake.send(net, {{127, 0, 0, 1}, 12345}, "world")
     end)
-    assert_receive "world"
+    assert_receive {:network, "world"}
   end
 
 end

@@ -50,10 +50,12 @@ defmodule Crypto do
   def sign(msg, priv, hash? \\ false)
 
   def sign(msg, priv, hash?) when is_binary(priv) do
-    msg = cond do
-      hash? -> sha256(msg)
-      :else -> term_to_bin(msg)
-    end
+    msg =
+      cond do
+        hash? -> sha256(msg)
+        :else -> term_to_bin(msg)
+      end
+
     :crypto.sign(:eddsa, :none, msg, [priv, :ed25519])
   end
 
@@ -74,10 +76,12 @@ defmodule Crypto do
   def valid?(sig, msg, pub, hash? \\ false)
 
   def valid?(sig, msg, pub, hash?) when is_binary(pub) do
-    msg = cond do
-      hash? -> sha256(msg)
-      :else -> term_to_bin(msg)
-    end
+    msg =
+      cond do
+        hash? -> sha256(msg)
+        :else -> term_to_bin(msg)
+      end
+
     :crypto.verify(:eddsa, :none, msg, sig, [pub, :ed25519])
   end
 
@@ -95,5 +99,4 @@ defmodule Crypto do
   defp term_to_bin(term) when is_binary(term), do: term
 
   defp term_to_bin(term), do: :erlang.term_to_binary(term)
-
 end

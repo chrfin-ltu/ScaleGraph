@@ -48,6 +48,7 @@ defmodule Netsim.UDP do
     if state.socket == nil do
       Logger.error("no socket! Forgot to connect?")
     end
+
     :ok = :gen_udp.send(state.socket, dst, payload)
     {:noreply, state}
   end
@@ -69,5 +70,4 @@ defmodule Netsim.UDP do
     Kernel.send(state.owner, {:network, payload})
     {:noreply, state}
   end
-
 end

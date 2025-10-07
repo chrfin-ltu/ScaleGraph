@@ -1,21 +1,20 @@
 # TODO:
-# - When sending a request, remember the sending process so that the response
-#   can be delivered back to the sender.
 # - Generate proper message IDs. Ideally configurable (e.g. number of bits).
 # - Handle timeouts (no response). Possibly includes re-sending a few times.
 # - When requests can time out, a late response has to be handled correctly.
 # - When a response is received, the RTT should be included.
 # - Handle signatures (signing outgoing, verifying incoming).
-# - Seamlessly use either fake or real network.
 # - Include this RPC server in a supervision tree.
 # - Encoding currently turns a term into a binary representation.
 #   The encoding should be made more efficient (compact) in the future.
-# - The decoding will then have to be more complex.
+# - The decoding will then also have to be more complex.
 # - With a more compact and special-purpose binary message format, we may need
 #   to include a version field.
 # - It probably makes sense to be able to switch between a plain and
 #   straightforward term-based and a more sophisticated (and presumably more
 #   error-prone) binary format.
+# - Maybe make handling of unexpected responses configurable? Is there really
+#   any point in delivering them to the handler? What can it do?
 # - Do we handle all messages here (such as consensus)? Or split?
 #
 # NOTE: Because we don't collect multiple transactions into a block to be
@@ -30,13 +29,30 @@ defmodule ScaleGraph.RPC do
   constructing, sending, and receiving RPC messages, including associating
   requests with responses.
 
+  A `:handler` process can be specified as an option to `start_link/1` and
+  defaults to `self()`. Incoming (unsolicited) RPC **requests** are delivered
+  to the handler. An RPC **response** is delivered to the process that made the
+  corresponding request. This can be overridden by specifying the process that
+  should receive the response. For example:
+
+  ```
+  RPC.ping(rpc, dst)            # response is delivered to self()
+  RPC.ping(rpc, dst, receiver)  # response is delievered to receiver
+  ```
+
+  When an unexpected response is received (i.e. one not matching a previously
+  outgoing request), this is logged as a warning, and the response is delivered
+  to the handler. (This behavior is subject to change.)
+
   Note that each node has its own RPC instance and so knows the source IP:port
   address, which is essentially its own address. It therefore does not need
-  to be supplied explicitly.
+  to be supplied explicitly when making RPC calls.
   """
   use GenServer
+  require Logger
 
-  @id_bits 32 # XXX: using a 32-bit ID for now
+  # XXX: using a 32-bit ID for now
+  @id_bits 32
 
   defstruct [
     # {IP, port} of this node
@@ -47,7 +63,8 @@ defmodule ScaleGraph.RPC do
     net: nil,
     netmod: Netsim.Fake,
     # handler for incoming RPCs
-    handler: nil
+    handler: nil,
+    expected: %{}
   ]
 
   @doc """
@@ -65,13 +82,13 @@ defmodule ScaleGraph.RPC do
   # --- Functions for sending RPC requests, i.e. making RPC calls ---
 
   @doc "Send a PING RPC to `dst`."
-  def ping(name, dst) do
-    GenServer.cast(name, {:request, :ping, dst, nil})
+  def ping(name, dst, caller \\ self()) do
+    GenServer.cast(name, {:request, :ping, dst, nil, caller})
   end
 
   @doc "Send a FIND-NODES RPC to `dst`."
-  def find_nodes(name, dst, target) do
-    GenServer.cast(name, {:request, :find_nodes, dst, target})
+  def find_nodes(name, dst, target, caller \\ self()) do
+    GenServer.cast(name, {:request, :find_nodes, dst, target, caller})
   end
 
   # --- Functions for sending responses ---
@@ -101,10 +118,14 @@ defmodule ScaleGraph.RPC do
   end
 
   @impl GenServer
-  def handle_cast({:request, typ, dst, data}, state) do
+  def handle_cast({:request, typ, dst, data, caller}, state) do
     rpc = new_request(typ, state.addr, dst, data)
     payload = encode(rpc)
     state.netmod.send(state.net, dst, payload)
+    # Remember the request for later so we can map the response to it.
+    id = id(rpc)
+    timestamp = System.monotonic_time()
+    state = put_in(state.expected[id], {caller, rpc, timestamp})
     {:noreply, state}
   end
 
@@ -120,8 +141,42 @@ defmodule ScaleGraph.RPC do
   @impl GenServer
   def handle_info({:network, payload}, state) do
     rpc = decode(payload)
-    Kernel.send(state.handler, rpc)
+
+    state =
+      cond do
+        request?(rpc) ->
+          _handle_request(rpc, state)
+
+        response?(rpc) ->
+          _handle_response(rpc, state)
+
+        :else ->
+          Logger.error("neither RPC request nor response, passing to handler")
+          _handle_request(rpc, state)
+      end
+
     {:noreply, state}
+  end
+
+  defp _handle_request(rpc, state) do
+    Kernel.send(state.handler, rpc)
+    state
+  end
+
+  defp _handle_response(rpc, state) do
+    id = id(rpc)
+
+    case state.expected[id] do
+      # TODO: Do something useful with request and timestamp.
+      {caller, _request, _timestamp} ->
+        Kernel.send(caller, rpc)
+        Map.put(state, :expected, Map.delete(state.expected, id))
+
+      nil ->
+        Logger.warning("orphan RPC response, passing to handler")
+        Kernel.send(state.handler, rpc)
+        state
+    end
   end
 
   @doc "Encode an RPC message to binary for transmission over the network."
@@ -142,6 +197,16 @@ defmodule ScaleGraph.RPC do
   def data({_tag, {_typ, {_src, _dst, data, _id}}} = _rpc), do: data
   @doc "Extract RPC message ID."
   def id({_tag, {_typ, {_src, _dst, _data, id}}} = _rpc), do: id
+
+  @doc "Is this RPC message a request?"
+  def request?({tag, {_typ, {_src, _dst, _data, _id}}} = _rpc) do
+    tag == :rpc_request
+  end
+
+  @doc "Is this RPC message a response?"
+  def response?({tag, {_typ, {_src, _dst, _data, _id}}} = _rpc) do
+    tag == :rpc_response
+  end
 
   # --- Functions for constructing requests ---
 

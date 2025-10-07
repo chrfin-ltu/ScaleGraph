@@ -133,15 +133,15 @@ defmodule ScaleGraph.RPC do
   # --- Functions for extracting RPC message fields ---
 
   @doc "Extract RPC message type, e.g. `:ping`."
-  def typ({_tag, {typ, {_src, _dst, _data, _id}}}), do: typ
+  def typ({_tag, {typ, {_src, _dst, _data, _id}}} = _rpc), do: typ
   @doc "Extract RPC message source address."
-  def src({_tag, {_typ, {src, _dst, _data, _id}}}), do: src
+  def src({_tag, {_typ, {src, _dst, _data, _id}}} = _rpc), do: src
   @doc "Extract RPC message destination address."
-  def dst({_tag, {_typ, {_src, dst, _data, _id}}}), do: dst
+  def dst({_tag, {_typ, {_src, dst, _data, _id}}} = _rpc), do: dst
   @doc "Extract RPC message payload data."
-  def data({_tag, {_typ, {_src, _dst, data, _id}}}), do: data
+  def data({_tag, {_typ, {_src, _dst, data, _id}}} = _rpc), do: data
   @doc "Extract RPC message ID."
-  def id({_tag, {_typ, {_src, _dst, _data, id}}}), do: id
+  def id({_tag, {_typ, {_src, _dst, _data, id}}} = _rpc), do: id
 
   # --- Functions for constructing requests ---
 

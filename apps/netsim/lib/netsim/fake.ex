@@ -7,25 +7,25 @@ defmodule Netsim.Fake do
   defstruct nodes: nil
 
   def start_link(opts) do
-    GenServer.start_link(__MODULE__, opts)
+    GenServer.start_link(__MODULE__, nil, opts)
   end
 
   @doc """
   Connect a process to the network so it can receive network messages.
 
-  The `destination` address (as an `{ip, port}` pair) is mapped to the
-  process. Messages destined for this address are sent to the connected process.
-  Any number of processes can connect, but there can obviously only be one
+  The destination `address` (as an `{ip, port}` pair) is mapped to the
+  process. Messages destined for this address are delivered to the connected
+  process. Any number of processes can connect, but there can only be one
   process per address.
   """
-  def connect(net, destination, process \\ self())
+  def connect(net, address, process \\ self())
 
   def connect(net, {_ip, _port} = dst, process) do
     GenServer.call(net, {:connect, dst, process})
   end
 
   @doc """
-  Send a message `payload` to the given destination address.
+  Send a (binary) `payload` to destination address `dst`.
   """
   def send(net, {_ip, _port} = dst, payload) do
     GenServer.cast(net, {:send, dst, payload})

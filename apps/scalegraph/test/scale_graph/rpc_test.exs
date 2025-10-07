@@ -14,20 +14,20 @@ defmodule ScaleGraph.RPCTest do
       RPC.start_link(
         addr: addr1,
         id: 123,
-        net: net
+        net: {Fake, net}
       )
 
     {:ok, rpc2} =
       RPC.start_link(
         addr: addr2,
         id: 234,
-        net: net
+        net: {Fake, net}
       )
 
     RPC.ping(rpc1, addr2)
-    assert_receive {:rpc_request, {:ping, {addr1, addr2, nil, _id}}} = request
+    assert_receive {:rpc_request, {:ping, {^addr1, ^addr2, nil, _id}}}
     RPC.ping(rpc2, addr1)
-    assert_receive {:rpc_request, {:ping, {addr2, addr1, nil, _id}}}
+    assert_receive {:rpc_request, {:ping, {^addr2, ^addr1, nil, _id}}}
   end
 
   test "ping pong" do
@@ -39,14 +39,14 @@ defmodule ScaleGraph.RPCTest do
       RPC.start_link(
         addr: addr1,
         id: 123,
-        net: net
+        net: {Fake, net}
       )
 
     {:ok, rpc2} =
       RPC.start_link(
         addr: addr2,
         id: 234,
-        net: net
+        net: {Fake, net}
       )
 
     RPC.ping(rpc1, addr2)
@@ -64,14 +64,14 @@ defmodule ScaleGraph.RPCTest do
       RPC.start_link(
         addr: addr1,
         id: 123,
-        net: net
+        net: {Fake, net}
       )
 
     {:ok, rpc2} =
       RPC.start_link(
         addr: addr2,
         id: 234,
-        net: net
+        net: {Fake, net}
       )
 
     RPC.find_nodes(rpc1, addr2, 54321)
@@ -80,4 +80,31 @@ defmodule ScaleGraph.RPCTest do
     RPC.respond(rpc2, request, closest)
     assert_receive {:rpc_response, {:find_nodes, {^addr2, ^addr1, ^closest, ^id}}}
   end
+
+  test "UDP ping pong" do
+    {:ok, net1} = Netsim.UDP.start_link([])
+    addr1 = {{127, 0, 0, 1}, 12345}
+    {:ok, net2} = Netsim.UDP.start_link([])
+    addr2 = {{127, 0, 0, 2}, 23456}
+
+    {:ok, rpc1} =
+      RPC.start_link(
+        addr: addr1,
+        id: 123,
+        net: {Netsim.UDP, net1}
+      )
+
+    {:ok, rpc2} =
+      RPC.start_link(
+        addr: addr2,
+        id: 234,
+        net: {Netsim.UDP, net2}
+      )
+
+    RPC.ping(rpc1, addr2)
+    assert_receive {:rpc_request, {:ping, {^addr1, ^addr2, nil, id}}} = request
+    RPC.respond(rpc2, request, nil)
+    assert_receive {:rpc_response, {:ping, {^addr2, ^addr1, nil, ^id}}}
+  end
+
 end

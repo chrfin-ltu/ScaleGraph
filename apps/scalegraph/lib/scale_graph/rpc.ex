@@ -36,7 +36,7 @@ defmodule ScaleGraph.RPC do
   """
   use GenServer
 
-  @id_bits 32 # using a 32-bit ID for now
+  @id_bits 32 # XXX: using a 32-bit ID for now
 
   defstruct [
     # {IP, port} of this node
@@ -45,13 +45,21 @@ defmodule ScaleGraph.RPC do
     id: nil,
     # network
     net: nil,
+    netmod: Netsim.Fake,
     # handler for incoming RPCs
     handler: nil
   ]
 
+  @doc """
+  Start RPC server as a linked process.
+
+  Options:
+  - `net: {network implementation module, network process}` (mandatory)
+  - `handler: process` (optional, defaults to `self()`)
+  """
   def start_link(opts) do
     opts = Keyword.merge(opts, handler: self())
-    GenServer.start_link(__MODULE__, opts)
+    GenServer.start_link(__MODULE__, opts, opts)
   end
 
   # --- Functions for sending RPC requests, i.e. making RPC calls ---
@@ -77,19 +85,18 @@ defmodule ScaleGraph.RPC do
   def init(opts) do
     addr = Keyword.fetch!(opts, :addr)
     id = Keyword.fetch!(opts, :id)
-    net = Keyword.fetch!(opts, :net)
+    {netmod, net} = Keyword.fetch!(opts, :net)
     handler = Keyword.fetch!(opts, :handler)
 
     state = %__MODULE__{
       addr: addr,
       id: id,
       net: net,
+      netmod: netmod,
       handler: handler
     }
 
-    # TODO: Need to connect to the network! But which one?
-    # Must generalize to different network implementations!
-    Netsim.Fake.connect(net, addr)
+    netmod.connect(net, addr)
     {:ok, state}
   end
 
@@ -97,8 +104,7 @@ defmodule ScaleGraph.RPC do
   def handle_cast({:request, typ, dst, data}, state) do
     rpc = new_request(typ, state.addr, dst, data)
     payload = encode(rpc)
-    # XXX
-    Netsim.Fake.send(state.net, dst, payload)
+    state.netmod.send(state.net, dst, payload)
     {:noreply, state}
   end
 
@@ -107,8 +113,7 @@ defmodule ScaleGraph.RPC do
     rpc = response(request, data)
     dst = dst(rpc)
     payload = encode(rpc)
-    # XXX
-    Netsim.Fake.send(state.net, dst, payload)
+    state.netmod.send(state.net, dst, payload)
     {:noreply, state}
   end
 
@@ -166,7 +171,7 @@ defmodule ScaleGraph.RPC do
     {:rpc_response, {typ, {dst, src, reply_data, id}}}
   end
 
-  # FIXME: Generate random. Need to know the number of bits (configurable).
+  # TODO: number of bits should be configurable.
   # May need to depend on the state, depending on how configurable.
   defp generate_id(), do: Util.rand_bits(@id_bits)
 end

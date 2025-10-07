@@ -9,5 +9,4 @@ defmodule ScaleGraph.Node do
   def init(_opts) do
     {:ok, nil}
   end
-
 end

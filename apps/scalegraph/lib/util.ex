@@ -129,5 +129,4 @@ defmodule Util do
     max = Bitwise.<<<(1, n) - 1
     rand(0, max)
   end
-
 end

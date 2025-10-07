@@ -1,18 +1,7 @@
 defmodule ScaleGraph.Daemon do
   @moduledoc """
-  Documentation for `ScaleGraph.Daemon`.
+  Runs a ScaleGraph node, i.e. in production.
   """
 
-  @doc """
-  Hello world.
 
-  ## Examples
-
-      iex> ScaleGraph.Daemon.hello()
-      :world
-
-  """
-  def hello do
-    :world
-  end
 end

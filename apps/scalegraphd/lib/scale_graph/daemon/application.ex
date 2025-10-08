@@ -17,7 +17,7 @@ defmodule ScaleGraph.Daemon.Application do
       {Netsim.Fake, [name: :network]},
       {ScaleGraph.RPC,
        [name: :rpc, id: id, addr: addr, net: {Netsim.Fake, :network}, handler: :node]},
-      {ScaleGraph.Node, [name: :node]}
+      {ScaleGraph.Node, [name: :node, rpc: :rpc]}
     ]
 
     # See https://hexdocs.pm/elixir/Supervisor.html

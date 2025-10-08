@@ -16,6 +16,10 @@
 # - Maybe make handling of unexpected responses configurable? Is there really
 #   any point in delivering them to the handler? What can it do?
 # - Do we handle all messages here (such as consensus)? Or split?
+# - When calling RPCs (i.e. ping/2, find_nodes/3, etc.) we may want to
+#   specify options such as timeouts or maximum retries. So if we want to
+#   also optionally specify a process that receives the response, that would
+#   have to be one of the keyword options.
 #
 # NOTE: Because we don't collect multiple transactions into a block to be
 # handled in bulk, but instead handle one transaction at a time, messaging
@@ -81,6 +85,11 @@ defmodule ScaleGraph.RPC do
 
   # --- Functions for sending RPC requests, i.e. making RPC calls ---
 
+  @doc "Set the handler process."
+  def set_handler(name, handler \\ self()) do
+    GenServer.call(name, {:set_handler, handler})
+  end
+
   @doc "Send a PING RPC to `dst`."
   def ping(name, dst, caller \\ self()) do
     GenServer.cast(name, {:request, :ping, dst, nil, caller})
@@ -115,6 +124,12 @@ defmodule ScaleGraph.RPC do
 
     netmod.connect(net, addr)
     {:ok, state}
+  end
+
+  @impl GenServer
+  def handle_call({:set_handler, handler}, _caller, state) do
+    state = Map.put(state, :handler, handler)
+    {:reply, :ok, state}
   end
 
   @impl GenServer
@@ -158,6 +173,7 @@ defmodule ScaleGraph.RPC do
     {:noreply, state}
   end
 
+  # The RPC message is a decoded (term, not binary) message.
   defp _handle_request(rpc, state) do
     Kernel.send(state.handler, rpc)
     state

@@ -17,9 +17,7 @@
 #   any point in delivering them to the handler? What can it do?
 # - Do we handle all messages here (such as consensus)? Or split?
 # - When calling RPCs (i.e. ping/2, find_nodes/3, etc.) we may want to
-#   specify options such as timeouts or maximum retries. So if we want to
-#   also optionally specify a process that receives the response, that would
-#   have to be one of the keyword options.
+#   specify options such as timeouts or maximum retries.
 #
 # NOTE: Because we don't collect multiple transactions into a block to be
 # handled in bulk, but instead handle one transaction at a time, messaging
@@ -34,14 +32,15 @@ defmodule ScaleGraph.RPC do
   requests with responses.
 
   A `:handler` process can be specified as an option to `start_link/1` and
-  defaults to `self()`. Incoming (unsolicited) RPC **requests** are delivered
-  to the handler. An RPC **response** is delivered to the process that made the
-  corresponding request. This can be overridden by specifying the process that
-  should receive the response. For example:
+  defaults to `self()`. The handler can also be set with `set_handler/1`.
+  Incoming (unsolicited) RPC **requests** are delivered to the handler. An RPC
+  **response** is delivered to the process that made the corresponding request.
+  This can be overridden by specifying the process that should receive the
+  response using a `:reply_to` option, for example:
 
   ```
-  RPC.ping(rpc, dst)            # response is delivered to self()
-  RPC.ping(rpc, dst, receiver)  # response is delievered to receiver
+  RPC.ping(rpc, dst)                      # response is delivered to self()
+  RPC.ping(rpc, dst, reply_to: receiver)  # response is delievered to receiver
   ```
 
   When an unexpected response is received (i.e. one not matching a previously
@@ -91,13 +90,15 @@ defmodule ScaleGraph.RPC do
   end
 
   @doc "Send a PING RPC to `dst`."
-  def ping(name, dst, caller \\ self()) do
-    GenServer.cast(name, {:request, :ping, dst, nil, caller})
+  def ping(name, dst, opts \\ []) do
+    reply_to = Keyword.get(opts, :reply_to, self())
+    GenServer.cast(name, {:request, :ping, dst, nil, reply_to})
   end
 
   @doc "Send a FIND-NODES RPC to `dst`."
-  def find_nodes(name, dst, target, caller \\ self()) do
-    GenServer.cast(name, {:request, :find_nodes, dst, target, caller})
+  def find_nodes(name, dst, target, opts \\ []) do
+    reply_to = Keyword.get(opts, :reply_to, self())
+    GenServer.cast(name, {:request, :find_nodes, dst, target, reply_to})
   end
 
   # --- Functions for sending responses ---

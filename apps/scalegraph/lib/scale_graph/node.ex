@@ -43,7 +43,7 @@ defmodule ScaleGraph.Node do
   end
 
   @impl GenServer
-  def handle_info({:rpc_request, msg} = req, state) do
+  def handle_info({:rpc_request, _msg} = req, state) do
     Logger.info("got some RPC request")
     case RPC.typ(req) do
       :ping ->

@@ -73,7 +73,7 @@ defmodule ScaleGraph.RPCTest do
         assert_receive {:rpc_response, {:ping, {^addr2, ^addr1, nil, _id}}}
         send(parent, "done")
       end)
-      RPC.ping(rpc1, addr2, receiver)
+      RPC.ping(rpc1, addr2, reply_to: receiver)
       assert_receive {:rpc_request, {:ping, {^addr1, ^addr2, nil, _id}}} = req
       RPC.respond(rpc2, req, nil)
       assert_receive "done"

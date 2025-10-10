@@ -4,7 +4,6 @@
 # - When requests can time out, a late response has to be handled correctly.
 # - When a response is received, the RTT should be included.
 # - Handle signatures (signing outgoing, verifying incoming).
-# - Include this RPC server in a supervision tree.
 # - Encoding currently turns a term into a binary representation.
 #   The encoding should be made more efficient (compact) in the future.
 # - The decoding will then also have to be more complex.
@@ -67,25 +66,27 @@ defmodule ScaleGraph.RPC do
     netmod: Netsim.Fake,
     # handler for incoming RPCs
     handler: nil,
+    name: nil,
     expected: %{}
   ]
 
   @doc """
   Start RPC server as a linked process.
 
-  Options:
+  Required options:
   - `net: {network implementation module, network process}` (mandatory)
-  - `handler: process` (optional, defaults to `self()`)
+
+  Optional:
+  - `handler: process`, pid, atom, or via-tuple.
   """
   def start_link(opts) do
-    opts = Keyword.merge(opts, handler: self())
     GenServer.start_link(__MODULE__, opts, opts)
   end
 
   # --- Functions for sending RPC requests, i.e. making RPC calls ---
 
   @doc "Set the handler process."
-  def set_handler(name, handler \\ self()) do
+  def set_handler(name, handler) when not is_nil(handler) do
     GenServer.call(name, {:set_handler, handler})
   end
 
@@ -112,36 +113,43 @@ defmodule ScaleGraph.RPC do
   def init(opts) do
     addr = Keyword.fetch!(opts, :addr)
     id = Keyword.fetch!(opts, :id)
+    name = Keyword.get(opts, :name, self())
     {netmod, net} = Keyword.fetch!(opts, :net)
-    handler = Keyword.fetch!(opts, :handler)
+    handler = Keyword.get(opts, :handler)
 
     state = %__MODULE__{
       addr: addr,
       id: id,
       net: net,
       netmod: netmod,
-      handler: handler
+      handler: handler,
+      name: name
     }
 
-    netmod.connect(net, addr)
+    if handler != nil do
+      :ok = netmod.connect(net, addr, name)
+    end
     {:ok, state}
   end
 
   @impl GenServer
   def handle_call({:set_handler, handler}, _caller, state) do
+    if state.handler == nil do
+      :ok = state.netmod.connect(state.net, state.addr, state.name)
+    end
     state = Map.put(state, :handler, handler)
     {:reply, :ok, state}
   end
 
   @impl GenServer
-  def handle_cast({:request, typ, dst, data, caller}, state) do
+  def handle_cast({:request, typ, dst, data, reply_to}, state) do
     rpc = new_request(typ, state.addr, dst, data)
     payload = encode(rpc)
     state.netmod.send(state.net, dst, payload)
     # Remember the request for later so we can map the response to it.
     id = id(rpc)
     timestamp = System.monotonic_time()
-    state = put_in(state.expected[id], {caller, rpc, timestamp})
+    state = put_in(state.expected[id], {reply_to, rpc, timestamp})
     {:noreply, state}
   end
 
@@ -167,7 +175,7 @@ defmodule ScaleGraph.RPC do
           _handle_response(rpc, state)
 
         :else ->
-          Logger.error("neither RPC request nor response, passing to handler")
+          Logger.error("RPC: neither request nor response, passing to handler")
           _handle_request(rpc, state)
       end
 
@@ -176,7 +184,13 @@ defmodule ScaleGraph.RPC do
 
   # The RPC message is a decoded (term, not binary) message.
   defp _handle_request(rpc, state) do
-    Kernel.send(state.handler, rpc)
+    pid = GenServer.whereis(state.handler)
+    try do
+      Kernel.send(pid, rpc)
+    rescue
+      e ->
+        Logger.error("RPC.deliver_request: #{inspect(e)}")
+    end
     state
   end
 
@@ -185,13 +199,25 @@ defmodule ScaleGraph.RPC do
 
     case state.expected[id] do
       # TODO: Do something useful with request and timestamp.
-      {caller, _request, _timestamp} ->
-        Kernel.send(caller, rpc)
+      {reply_to, _request, _timestamp} ->
+        pid = GenServer.whereis(reply_to)
+        try do
+          Kernel.send(pid, rpc)
+        rescue
+          e ->
+            Logger.error("RPC.deliver_response to caller: #{inspect(e)}")
+        end
         Map.put(state, :expected, Map.delete(state.expected, id))
 
       nil ->
-        Logger.warning("orphan RPC response, passing to handler")
-        Kernel.send(state.handler, rpc)
+        Logger.warning("RPC.deliver_response: orphan RPC response, passing to handler")
+        pid = GenServer.whereis(state.handler)
+        try do
+          Kernel.send(pid, rpc)
+        rescue
+          e ->
+            Logger.error("RPC.deliver_response to handler: #{inspect(e)}")
+        end
         state
     end
   end

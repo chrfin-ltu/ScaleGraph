@@ -16,14 +16,16 @@ defmodule ScaleGraph.RPCTest do
         RPC.start_link(
           addr: addr1,
           id: 123,
-          net: {Fake, net}
+          net: {Fake, net},
+          handler: self()
         )
 
       {:ok, rpc2} =
         RPC.start_link(
           addr: addr2,
           id: 234,
-          net: {Fake, net}
+          net: {Fake, net},
+          handler: self()
         )
 
       %{addr1: addr1, addr2: addr2, rpc1: rpc1, rpc2: rpc2}
@@ -112,14 +114,16 @@ defmodule ScaleGraph.RPCTest do
       RPC.start_link(
         addr: addr1,
         id: 123,
-        net: {UDP, net1}
+        net: {UDP, net1},
+        handler: self()
       )
 
     {:ok, rpc2} =
       RPC.start_link(
         addr: addr2,
         id: 234,
-        net: {UDP, net2}
+        net: {UDP, net2},
+        handler: self()
       )
 
     RPC.ping(rpc1, addr2)

@@ -30,8 +30,11 @@ defmodule ScaleGraph.RPC do
   constructing, sending, and receiving RPC messages, including associating
   requests with responses.
 
-  A `:handler` process can be specified as an option to `start_link/1` and
-  defaults to `self()`. The handler can also be set with `set_handler/1`.
+  A `:handler` process can be specified as an option to `start_link/1`.
+  In that case, the handler is set during initialization (which also connects
+  the RPC server to the network.)
+  The handler can also be set with `set_handler/1`.
+
   Incoming (unsolicited) RPC **requests** are delivered to the handler. An RPC
   **response** is delivered to the process that made the corresponding request.
   This can be overridden by specifying the process that should receive the
@@ -85,7 +88,9 @@ defmodule ScaleGraph.RPC do
 
   # --- Functions for sending RPC requests, i.e. making RPC calls ---
 
-  @doc "Set the handler process."
+  @doc """
+  Set the handler process and connect to the network (unless already connected).
+  """
   def set_handler(name, handler) when not is_nil(handler) do
     GenServer.call(name, {:set_handler, handler})
   end

@@ -5,7 +5,7 @@ defmodule Netsim.UDPTest do
   # Since the tests open real ports, pick a "random" address and port that is
   # unlikely to be in use.
   @bind_port 24680
-  @bind_ip {127, 159, 264, 123}
+  @bind_ip {127, 159, 246, 123}
   @bind_addr {@bind_ip, @bind_port}
 
   test "start, connect, send to self" do
@@ -23,7 +23,7 @@ defmodule Netsim.UDPTest do
     {:ok, udp} = UDP.start_link([])
     this = self()
 
-    owner_pid = spawn(fn ->
+    spawn(fn ->
       Registry.register(__MODULE__, key, nil)
       UDP.connect(udp, @bind_addr, owner_via)
       UDP.send(udp, @bind_addr, "hello")

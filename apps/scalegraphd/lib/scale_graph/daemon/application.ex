@@ -4,25 +4,27 @@ defmodule ScaleGraph.Daemon.Application do
   @moduledoc false
 
   use Application
+  require Logger
 
   @impl true
-  def start(_type, _args) do
+  def start(_type, args) do
+    Logger.info("starting #{__MODULE__} using NodeSupervisor")
+    Logger.info("args: #{inspect(args)}")
     keys = Crypto.generate_keys()
-    id = Util.key_to_id(keys.priv)
-    addr = {{127, 0, 0, 1}, 9001}
+    id = Util.key_to_id(keys.pub)
+    addr = {{127, 1, 1, 1}, 9001}
 
+    opts = [
+      keys: keys, id: id, addr: addr,
+      strategy: :one_for_one,
+      name: ScaleGraph.Daemon.NodeSupervisor
+    ]
     children = [
-      # Starts a worker by calling: ScaleGraph.Daemon.Worker.start_link(arg)
-      # {ScaleGraph.Daemon.Worker, arg}
-      {Netsim.Fake, [name: :network]},
-      {ScaleGraph.RPC,
-       [name: :rpc, id: id, addr: addr, net: {Netsim.Fake, :network}, handler: :node]},
-      {ScaleGraph.Node, [name: :node, rpc: :rpc]}
+      {ScaleGraph.NodeSupervisor, opts}
     ]
 
-    # See https://hexdocs.pm/elixir/Supervisor.html
-    # for other strategies and supported options
     opts = [strategy: :one_for_one, name: ScaleGraph.Daemon.Supervisor]
     Supervisor.start_link(children, opts)
   end
+
 end

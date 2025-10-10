@@ -23,13 +23,14 @@ defmodule Netsim.FakeTest do
     assert_receive {:network, "hello"}
   end
 
-  @tag skip: "TODO"
   test "should not crash when sending to bogus address" do
     {:ok, net} = Netsim.Fake.start_link([])
     :ok = Netsim.Fake.connect(net, {{127, 0, 0, 1}, 12345}, self())
 
     spawn(fn ->
+      # This one fails...
       Netsim.Fake.send(net, {{127, 127, 127, 127}, 0}, "hello")
+      # ...but this one should still succeed!
       Netsim.Fake.send(net, {{127, 0, 0, 1}, 12345}, "world")
     end)
 

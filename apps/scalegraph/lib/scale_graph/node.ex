@@ -1,30 +1,57 @@
-# TODO:
-# - Need to take/generate an ID/keypair and address.
 defmodule ScaleGraph.Node do
   use GenServer
   require Logger
   alias ScaleGraph.RPC
 
+  defstruct [
+    id: nil,
+    addr: nil,
+    keys: nil,
+    rpc: nil,
+  ]
+
+  @doc """
+  Start a Node as a linked process.
+
+  Required options:
+  - `:keys` - a `%{priv: priv, pub: pub}` key pair.
+  - `:addr` - an `{ip, port}` pair.
+  """
   def start_link(opts) do
+    opts = massage_opts(opts)
     GenServer.start_link(__MODULE__, opts, opts)
   end
 
+  defp massage_opts(opts) do
+    keys = Keyword.fetch!(opts, :keys)
+    addr = Keyword.fetch!(opts, :addr)
+    id = Keyword.get(opts, :id, Util.key_to_id(keys[:pub]))
+    name = :"node_#{inspect(addr)}"
+    opts
+      |> Keyword.put_new(:id, id)
+      |> Keyword.put_new(:name, name)
+  end
+
   def ping(node, dst) do
-    Logger.info("Node.ping(#{inspect(dst)})")
-    GenServer.call(node, {:cmd, :ping, dst})
+    # TODO: Handle timeouts more sensibly.
+    GenServer.call(node, {:cmd, :ping, dst}, 500)
   end
 
   @impl GenServer
   def init(opts) do
-    # FIXME: The Node should start the network and RPC servers as supervised
-    # children! However, for testing, we also need it to be possible to pass
-    # them in from the outside. So they can be specified either as PID/name
-    # when started outside, or as a keyword list when started here.
-    rpc = Keyword.fetch!(opts, :rpc)
+    keys = opts[:keys]
+    id = opts[:id]
+    addr = opts[:addr]
+    rpc = opts[:rpc]
     # Because we accepted an RPC server from the outside, we need to explicitly
     # register this Node process as the handler.
-    :ok = RPC.set_handler(rpc)
-    state = %{rpc: rpc}
+    :ok = RPC.set_handler(rpc, Keyword.get(opts, :name))
+    state = %__MODULE__{
+      id: id,
+      addr: addr,
+      keys: keys,
+      rpc: rpc
+    }
     {:ok, state}
   end
 
@@ -44,15 +71,14 @@ defmodule ScaleGraph.Node do
 
   @impl GenServer
   def handle_info({:rpc_request, _msg} = req, state) do
-    Logger.info("got some RPC request")
     case RPC.typ(req) do
       :ping ->
-        Logger.info("responding to a PING request")
         RPC.respond(state.rpc, req, nil)
 
       _ ->
         Logger.error("Ignoring unexpected RPC: #{inspect(req)}")
     end
+    {:noreply, state}
   end
 
   @impl GenServer

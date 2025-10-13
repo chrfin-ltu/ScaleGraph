@@ -16,6 +16,7 @@ defmodule ScaleGraph.Daemon.Application do
 
     opts = [
       keys: keys, id: id, addr: addr,
+      mode: :production,
       strategy: :one_for_one,
       name: ScaleGraph.Daemon.NodeSupervisor
     ]

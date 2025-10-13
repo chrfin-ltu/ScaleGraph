@@ -9,6 +9,7 @@ defmodule ScaleGraph.NodeSupervisorTest do
     id = Util.key_to_id(keys.pub)
     addr = {{127, 2, 2, 2}, 9002}
     opts = [
+      mode: :production,
       keys: keys, id: id, addr: addr,
       # Need to allow many restarts!
       max_restarts: 500,

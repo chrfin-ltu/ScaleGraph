@@ -1,3 +1,8 @@
+# TODO:
+# - init_production and init_simulation currently expect different options
+#   (or rather expect options in different shapes). The two cases should be
+#   unified so that there is less special-casing.
+# - Always take names from the outside as options and fall back on defaults.
 defmodule ScaleGraph.NodeSupervisor do
   use Supervisor
 
@@ -5,9 +10,17 @@ defmodule ScaleGraph.NodeSupervisor do
     Supervisor.start_link(__MODULE__, opts, opts)
   end
 
-  # FIXME: Need to take (better) names from outside!
   @impl Supervisor
   def init(opts) do
+    # TODO: should be able to infer mode from options and
+    # massage them appropriately.
+    case opts[:mode] do
+      :production -> init_production(opts)
+      :simulation -> init_simulation(opts)
+    end
+  end
+
+  defp init_production(opts) do
     addr = opts[:addr]
     net_opts = opts
       |> Keyword.put(:name, :network_name)
@@ -27,6 +40,26 @@ defmodule ScaleGraph.NodeSupervisor do
       {ScaleGraph.RPC, rpc_opts},
       {ScaleGraph.Node, node_opts},
     ]
+
+    Supervisor.init(children, opts)
+  end
+
+  defp init_simulation(opts) do
+    node_opts = opts[:node_opts]
+    net_opts = opts[:net_opts]
+    rpc_opts = opts[:rpc_opts]
+
+    children = [
+      {ScaleGraph.RPC, rpc_opts},
+      {ScaleGraph.Node, node_opts},
+    ]
+
+    children =
+      if net_opts == nil do
+        children
+      else
+        [{net_opts[:mod], net_opts} | children]
+      end
 
     Supervisor.init(children, opts)
   end

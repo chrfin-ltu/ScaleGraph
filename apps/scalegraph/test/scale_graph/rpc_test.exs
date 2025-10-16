@@ -82,14 +82,14 @@ defmodule ScaleGraph.RPCTest do
     end
 
 
-    test "unexpected response is logged and delivered to handler", context do
+    test "unexpected response is logged but not delivered to handler", context do
       import ExUnit.CaptureLog
       %{addr1: addr1, addr2: addr2, rpc1: rpc1} = context
       id = 12321
       req = {:rpc_request, {:ping, {addr1, addr2, nil, id}}}
       assert capture_log(fn ->
         RPC.respond(rpc1, req, nil)
-        assert_receive {:rpc_response, {:ping, {^addr2, ^addr1, nil, ^id}}}
+        :timer.sleep(50)
       end) =~ "orphan RPC response"
     end
 
@@ -112,17 +112,19 @@ defmodule ScaleGraph.RPCTest do
     end
 
     test "ping with timeout and late response", context do
+      import ExUnit.CaptureLog
       %{addr1: addr1, addr2: addr2, rpc1: rpc1, rpc2: rpc2} = context
       RPC.ping(rpc1, addr2, timeout: 50)
       assert_receive {:rpc_request, {:ping, {^addr1, ^addr2, nil, _id}}} = req
       # Don't respond. Eventually we get a timeout.
       assert_receive {:timeout, ^req}
-      RPC.respond(rpc2, req, nil)
-      :timer.sleep(500)
+      assert capture_log(fn ->
+        RPC.respond(rpc2, req, nil)
+        :timer.sleep(50)
+      end) =~ "orphan RPC response"
     end
 
   end
-
 
   test "UDP ping pong" do
     {:ok, net1} = UDP.start_link([])
@@ -151,4 +153,5 @@ defmodule ScaleGraph.RPCTest do
     RPC.respond(rpc2, request, nil)
     assert_receive {:rpc_response, {:ping, {^addr2, ^addr1, nil, ^id}}}
   end
+
 end

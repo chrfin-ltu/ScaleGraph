@@ -1,8 +1,8 @@
 # TODO:
 # - Generate proper message IDs. Ideally configurable (e.g. number of bits).
-# - Handle timeouts (no response). Possibly includes re-sending a few times.
-# - When requests can time out, a late response has to be handled correctly.
 # - When a response is received, the RTT should be included.
+# - Every response should be delivered to the handler, along with connectivity
+#   stats (such as RTT) to allow global bookkeeping. This includes timeouts.
 # - Handle signatures (signing outgoing, verifying incoming).
 # - Encoding currently turns a term into a binary representation.
 #   The encoding should be made more efficient (compact) in the future.
@@ -15,8 +15,7 @@
 # - Maybe make handling of unexpected responses configurable? Is there really
 #   any point in delivering them to the handler? What can it do?
 # - Do we handle all messages here (such as consensus)? Or split?
-# - When calling RPCs (i.e. ping/2, find_nodes/3, etc.) we may want to
-#   specify options such as timeouts or maximum retries.
+# - Support a retry option so a timeout can trigger a re-send.
 #
 # NOTE: Because we don't collect multiple transactions into a block to be
 # handled in bulk, but instead handle one transaction at a time, messaging
@@ -57,8 +56,8 @@ defmodule ScaleGraph.RPC do
     that was sent and for which no response was received.
 
   When an unexpected response is received (i.e. one not matching a previously
-  outgoing request), this is logged as a warning, and the response is delivered
-  to the handler. (This behavior is subject to change.)
+  outgoing request), this is logged as a warning, and then the response is
+  dropped.
 
   Note that each node has its own RPC instance and so knows the source IP:port
   address, which is essentially its own address. It therefore does not need
@@ -81,7 +80,8 @@ defmodule ScaleGraph.RPC do
     # handler for incoming RPCs
     handler: nil,
     name: nil,
-    expected: %{}
+    expected: %{},
+    timeout_timers: %{},
   ]
 
   @doc """
@@ -168,10 +168,13 @@ defmodule ScaleGraph.RPC do
     id = id(rpc)
     timestamp = System.monotonic_time()
     state = put_in(state.expected[id], {reply_to, rpc, timestamp})
-    if timeout do
-      _timer = Process.send_after(self(), {:timeout?, id}, timeout)
-      # TODO: remember timer so we can cancel it when we get the response
-    end
+    state =
+      if timeout do
+        timer = Process.send_after(self(), {:timeout?, id}, timeout)
+        put_in(state.timeout_timers[id], timer)
+      else
+        state
+      end
     {:noreply, state}
   end
 
@@ -193,22 +196,15 @@ defmodule ScaleGraph.RPC do
         nil -> state
 
         {reply_to, rpc, _timestamp} ->
-          pid = GenServer.whereis(reply_to)
-          try do
-            Kernel.send(pid, {:timeout, rpc})
-          rescue
-            e ->
-              Logger.error("RPC.deliver_timeout to caller: #{inspect(e)}")
-          end
-          Map.put(state, :expected, Map.delete(state.expected, rpc_id))
+          _deliver(reply_to, {:timeout, rpc})
+          state
       end
-    # TODO: remove timer here?
+    state = _forget_request(state, rpc_id)
     {:noreply, state}
   end
 
   @impl GenServer
   def handle_info({:network, payload}, state) do
-    # TODO: cancel timeout timer
     rpc = decode(payload)
 
     state =
@@ -220,32 +216,25 @@ defmodule ScaleGraph.RPC do
           _handle_response(rpc, state)
 
         :else ->
-          Logger.error("RPC: neither request nor response, passing to handler")
-          _handle_request(rpc, state)
+          Logger.error("RPC: neither request nor response, ignoring")
+          #_handle_request(rpc, state)
+          state
       end
 
     {:noreply, state}
   end
 
-  defp _addr({_id, {_ip, port} = addr}) when is_integer(port) do
-    addr
-  end
+  defp _addr({_id, {_ip, port} = addr}) when is_integer(port), do: addr
 
-  defp _addr({_ip, port} = addr) when is_integer(port) do
-    addr
-  end
+  defp _addr({_ip, port} = addr) when is_integer(port), do: addr
+
 
   # The RPC message is a decoded (term, not binary) message.
   defp _handle_request(rpc, state) do
-    pid = GenServer.whereis(state.handler)
-    try do
-      Kernel.send(pid, rpc)
-    rescue
-      e ->
-        Logger.error("RPC.deliver_request: #{inspect(e)}")
-    end
+    _deliver(state.handler, rpc)
     state
   end
+
 
   defp _handle_response(rpc, state) do
     id = id(rpc)
@@ -253,26 +242,42 @@ defmodule ScaleGraph.RPC do
     case state.expected[id] do
       # TODO: Do something useful with request and timestamp.
       {reply_to, _request, _timestamp} ->
-        pid = GenServer.whereis(reply_to)
-        try do
-          Kernel.send(pid, rpc)
-        rescue
-          e ->
-            Logger.error("RPC.deliver_response to caller: #{inspect(e)}")
-        end
-        Map.put(state, :expected, Map.delete(state.expected, id))
+        _deliver(reply_to, rpc)
 
       nil ->
-        Logger.warning("RPC.deliver_response: orphan RPC response, passing to handler")
-        pid = GenServer.whereis(state.handler)
-        try do
-          Kernel.send(pid, rpc)
-        rescue
-          e ->
-            Logger.error("RPC.deliver_response to handler: #{inspect(e)}")
-        end
-        state
+        Logger.warning("RPC: ignoring orphan RPC response (timeout?)")
     end
+
+    _forget_request(state, id)
+  end
+
+
+  # Deliver a message to a process (could be the handler or a process expecting
+  # a response).
+  defp _deliver(proc, msg) do
+    pid = GenServer.whereis(proc)
+    try do
+      Kernel.send(pid, msg)
+    rescue
+      e ->
+        Logger.error("RPC: failed to deliver: #{inspect(e)}")
+    end
+  end
+
+
+  # Remove from expected and from timers, if they exist.
+  defp _forget_request(state, id) do
+    timer = state.timeout_timers[id]
+    timers =
+      case state.timeout_timers[id] do
+        nil ->
+          state.timeout_timers
+        timer ->
+          Process.cancel_timer(timer)
+          Map.delete(state.timeout_timers, id)
+      end
+    expected = Map.delete(state.expected, id)
+    %__MODULE__{state | timeout_timers: timers, expected: expected}
   end
 
   @doc "Encode an RPC message to binary for transmission over the network."

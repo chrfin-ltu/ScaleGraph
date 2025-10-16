@@ -45,6 +45,17 @@ defmodule ScaleGraph.RPC do
   RPC.ping(rpc, dst, reply_to: receiver)  # response is delievered to receiver
   ```
 
+  Making RPCs requires a destination and usually some payload data. A
+  destination address can be an `{ip, port}` pair or an `{id, {ip, port}}`
+  pair. RPC functions (`ping/3`, `find_nodes/4`, etc.) also take options.
+  Currently, two options are supported:
+  - `:reply_to` - specifies which process to deliver the response to
+    (defaults to the calling process).
+  - `:timeout` - a timeout in milliseconds. If no response is received for a
+    request after this much time, a `{:timeout, request}` message will be
+    delivered instead of a response. The `request` is a copy of the request
+    that was sent and for which no response was received.
+
   When an unexpected response is received (i.e. one not matching a previously
   outgoing request), this is logged as a warning, and the response is delivered
   to the handler. (This behavior is subject to change.)
@@ -97,14 +108,14 @@ defmodule ScaleGraph.RPC do
 
   @doc "Send a PING RPC to `dst`."
   def ping(name, dst, opts \\ []) do
-    reply_to = Keyword.get(opts, :reply_to, self())
-    GenServer.cast(name, {:request, :ping, dst, nil, reply_to})
+    opts = Keyword.put_new(opts, :reply_to, self())
+    GenServer.cast(name, {:request, :ping, dst, nil, opts})
   end
 
   @doc "Send a FIND-NODES RPC to `dst`."
   def find_nodes(name, dst, target, opts \\ []) do
-    reply_to = Keyword.get(opts, :reply_to, self())
-    GenServer.cast(name, {:request, :find_nodes, dst, target, reply_to})
+    opts = Keyword.put_new(opts, :reply_to, self())
+    GenServer.cast(name, {:request, :find_nodes, dst, target, opts})
   end
 
   # --- Functions for sending responses ---
@@ -147,14 +158,20 @@ defmodule ScaleGraph.RPC do
   end
 
   @impl GenServer
-  def handle_cast({:request, typ, dst, data, reply_to}, state) do
+  def handle_cast({:request, typ, dst, data, opts}, state) do
+    reply_to = opts[:reply_to]
+    timeout = opts[:timeout]
     rpc = new_request(typ, state.addr, dst, data)
     payload = encode(rpc)
-    state.netmod.send(state.net, dst, payload)
+    state.netmod.send(state.net, _addr(dst), payload)
     # Remember the request for later so we can map the response to it.
     id = id(rpc)
     timestamp = System.monotonic_time()
     state = put_in(state.expected[id], {reply_to, rpc, timestamp})
+    if timeout do
+      _timer = Process.send_after(self(), {:timeout?, id}, timeout)
+      # TODO: remember timer so we can cancel it when we get the response
+    end
     {:noreply, state}
   end
 
@@ -163,12 +180,35 @@ defmodule ScaleGraph.RPC do
     rpc = response(request, data)
     dst = dst(rpc)
     payload = encode(rpc)
-    state.netmod.send(state.net, dst, payload)
+    state.netmod.send(state.net, _addr(dst), payload)
+    {:noreply, state}
+  end
+
+  @impl GenServer
+  def handle_info({:timeout?, rpc_id}, state) do
+    # If nothing is expected, we must already have received the response.
+    # So there is nothing to do.
+    state =
+      case state.expected[rpc_id] do
+        nil -> state
+
+        {reply_to, rpc, _timestamp} ->
+          pid = GenServer.whereis(reply_to)
+          try do
+            Kernel.send(pid, {:timeout, rpc})
+          rescue
+            e ->
+              Logger.error("RPC.deliver_timeout to caller: #{inspect(e)}")
+          end
+          Map.put(state, :expected, Map.delete(state.expected, rpc_id))
+      end
+    # TODO: remove timer here?
     {:noreply, state}
   end
 
   @impl GenServer
   def handle_info({:network, payload}, state) do
+    # TODO: cancel timeout timer
     rpc = decode(payload)
 
     state =
@@ -185,6 +225,14 @@ defmodule ScaleGraph.RPC do
       end
 
     {:noreply, state}
+  end
+
+  defp _addr({_id, {_ip, port} = addr}) when is_integer(port) do
+    addr
+  end
+
+  defp _addr({_ip, port} = addr) when is_integer(port) do
+    addr
   end
 
   # The RPC message is a decoded (term, not binary) message.

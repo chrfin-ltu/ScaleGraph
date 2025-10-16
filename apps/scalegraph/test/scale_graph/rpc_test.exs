@@ -102,7 +102,27 @@ defmodule ScaleGraph.RPCTest do
       RPC.respond(rpc2, req, closest)
       assert_receive {:rpc_response, {:find_nodes, {^addr2, ^addr1, ^closest, ^id}}}
     end
+
+    test "ping with timeout", context do
+      %{addr1: addr1, addr2: addr2, rpc1: rpc1, rpc2: rpc2} = context
+      RPC.ping(rpc1, addr2, timeout: 50)
+      assert_receive {:rpc_request, {:ping, {^addr1, ^addr2, nil, _id}}} = req
+      # Don't respond. Eventually we get a timeout.
+      assert_receive {:timeout, ^req}
+    end
+
+    test "ping with timeout and late response", context do
+      %{addr1: addr1, addr2: addr2, rpc1: rpc1, rpc2: rpc2} = context
+      RPC.ping(rpc1, addr2, timeout: 50)
+      assert_receive {:rpc_request, {:ping, {^addr1, ^addr2, nil, _id}}} = req
+      # Don't respond. Eventually we get a timeout.
+      assert_receive {:timeout, ^req}
+      RPC.respond(rpc2, req, nil)
+      :timer.sleep(500)
+    end
+
   end
+
 
   test "UDP ping pong" do
     {:ok, net1} = UDP.start_link([])

@@ -73,6 +73,7 @@ defmodule ScaleGraph.RPC do
     # {IP, port} of this node
     addr: nil,
     # ID (e.g. public key) of this node
+    # FIXME: we need the keys, not just the ID
     id: nil,
     # network
     net: nil,
@@ -216,7 +217,7 @@ defmodule ScaleGraph.RPC do
           _handle_response(rpc, state)
 
         :else ->
-          Logger.error("RPC: neither request nor response, ignoring")
+          Logger.error("RPC: neither request nor response, ignoring: #{inspect rpc}")
           #_handle_request(rpc, state)
           state
       end
@@ -267,7 +268,6 @@ defmodule ScaleGraph.RPC do
 
   # Remove from expected and from timers, if they exist.
   defp _forget_request(state, id) do
-    timer = state.timeout_timers[id]
     timers =
       case state.timeout_timers[id] do
         nil ->

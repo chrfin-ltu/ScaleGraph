@@ -57,7 +57,7 @@ defmodule ScaleGraph.Sim do
   and generates missing values (all are optional).
   """
   @deprecated "NOT IMPLEMENTED"
-  def add_node(sim, opts) do
+  def add_node(_sim, _opts) do
     raise "FIXME: not implemented"
   end
 
@@ -179,7 +179,7 @@ defmodule ScaleGraph.Sim do
 
   @impl GenServer
   def handle_call({:node_pid, node}, _caller, state) do
-    pid = GenServer.whereis(_node_name(state, node))
+    pid = _node_pid(state, node)
     {:reply, pid, state}
   end
 
@@ -196,7 +196,7 @@ defmodule ScaleGraph.Sim do
   end
 
   # Should match whether we're given a Node name or a NodeSupervisor name.
-  defp _super_name(state, {:via, _, _} = _name) do
+  defp _super_name(_state, {:via, _, _} = _name) do
     raise "FIXME: not implemented"
   end
 
@@ -204,7 +204,7 @@ defmodule ScaleGraph.Sim do
 
   defp _node_pid(state, node) do
     node_name = _node_name(state, node)
-    GenServer.whereis(node)
+    GenServer.whereis(node_name)
   end
 
   defp _node_name(_state, id) when is_integer(id) do

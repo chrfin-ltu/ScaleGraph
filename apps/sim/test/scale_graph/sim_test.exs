@@ -147,6 +147,7 @@ defmodule SimTest do
     child_counts = DynamicSupervisor.count_children(supervisor)
     assert %{specs: 6, active: 6, supervisors: 5, workers: 1} = child_counts
     assert not Process.alive?(pid)
+    :timer.sleep(5)
     new_pid = Sim.node_pid(sim, {{127, 54, 54, 1}, 54321})
     assert pid != new_pid
     assert Process.alive?(new_pid)

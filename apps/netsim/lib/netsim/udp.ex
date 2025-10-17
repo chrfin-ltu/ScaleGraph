@@ -44,7 +44,7 @@ defmodule Netsim.UDP do
         {:ok, state}
 
       {{ip, port}, owner} ->
-        Logger.info("UDP.init: connecting")
+        #Logger.info("UDP.init: connecting")
         state = _connect(ip, port, owner, state)
         {:ok, state}
 
@@ -58,7 +58,7 @@ defmodule Netsim.UDP do
   def handle_call({:connect, {ip, port}, process}, _caller, state) do
     state = Map.put(state, :owner, process)
     if state.socket do
-      Logger.warning("UDP.connect: already connected, ignoring")
+      #Logger.warning("UDP.connect: already connected, ignoring")
       {:reply, :ok, state}
     else
       state = _connect(ip, port, process, state)

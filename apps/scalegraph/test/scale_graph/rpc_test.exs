@@ -104,7 +104,7 @@ defmodule ScaleGraph.RPCTest do
     end
 
     test "ping with timeout", context do
-      %{addr1: addr1, addr2: addr2, rpc1: rpc1, rpc2: rpc2} = context
+      %{addr1: addr1, addr2: addr2, rpc1: rpc1} = context
       RPC.ping(rpc1, addr2, timeout: 50)
       assert_receive {:rpc_request, {:ping, {^addr1, ^addr2, nil, _id}}} = req
       # Don't respond. Eventually we get a timeout.

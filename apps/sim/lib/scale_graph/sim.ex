@@ -12,7 +12,7 @@
 #   (probably!?) be given once as options directly to NodeSupervisor, rather
 #   than repeated for Node, RPC, and any other component that might need one
 #   or more of them. (NodeSupervisor can pass them along as needed.)
-# - Currently, NodeSupervisors are always restarted. They may not always be
+# - Currently, NodeSupervisors are always restarted. That may not always be
 #   desirable:
 #   - Figure out what restart strategy makes sense for the dynamic supervisor.
 #     Should nodes be restarted? We probably want to make it configurable...
@@ -89,6 +89,8 @@ defmodule ScaleGraph.Sim do
   def init(opts) do
     sim_id = System.unique_integer()
     node_count = Keyword.get(opts, :node_count, 0)
+    id_bits = Keyword.get(opts, :id_bits, 256)
+    shard_size = Keyword.get(opts, :shard_size, 5)
     keys = Enum.map(1..node_count, fn _ ->
       Crypto.generate_keys()
     end)
@@ -109,12 +111,16 @@ defmodule ScaleGraph.Sim do
     node_specs =
       Enum.zip([keys, ids, addrs])
       |> Enum.map(fn {keys, id, addr} ->
+        rpc_name = _rpc_via(sim_id, addr)
+        rt_name = _rt_via(sim_id, addr)
+        dht_name = _dht_via(sim_id, addr)
         node_name = _node_via(sim_id, addr)
         node_opts = [
           keys: keys, #
           id: id,     #
           addr: addr, #
-          rpc: _rpc_via(sim_id, addr),
+          rpc: rpc_name,
+          dht: dht_name,
           name: node_name,
         ]
         rpc_opts = [
@@ -122,19 +128,37 @@ defmodule ScaleGraph.Sim do
           id: id,     #
           addr: addr, #
           net: {Netsim.Fake, network_name},
-          name: _rpc_via(sim_id, addr),
+          name: rpc_name,
+        ]
+        rt_opts = [
+          id: id,     #
+          id_bits: id_bits,
+          bucket_size: shard_size,
+          name: rt_name,
+        ]
+        dht_opts = [
+          id: id,     #
+          rpc: rpc_name,
+          rt: rt_name,
+          rt_mod: ScaleGraph.DHT.FakeRT,
+          shard_size: shard_size,
+          # XXX: relying on default lookup opts
+          name: dht_name,
         ]
         node_sup_opts = [
           name: _node_sup_via(sim_id, addr),
           mode: :simulation,
+          shard_size: shard_size,
           rpc_opts: rpc_opts,
+          rt_opts: rt_opts,
+          dht_opts: dht_opts,
           node_opts: node_opts,
           strategy: :one_for_one,
         ]
         # TODO: Make a child spec here so we can control restarts?
         # (Instead of relying on child_spec/1)
         child = {ScaleGraph.NodeSupervisor, node_sup_opts}
-        DynamicSupervisor.start_child(dynsup, child)
+        {:ok, _} = DynamicSupervisor.start_child(dynsup, child)
         node_sup_opts
       end)
 
@@ -264,6 +288,14 @@ defmodule ScaleGraph.Sim do
 
   defp _rpc_via(sim_id, addr) do
     {:via, Registry, {_reg_name(), {ScaleGraph.RPC, addr, sim_id}}}
+  end
+
+  defp _rt_via(sim_id, addr) do
+    {:via, Registry, {_reg_name(), {ScaleGraph.RT, addr, sim_id}}}
+  end
+
+  defp _dht_via(sim_id, addr) do
+    {:via, Registry, {_reg_name(), {ScaleGraph.DHT, addr, sim_id}}}
   end
 
 end

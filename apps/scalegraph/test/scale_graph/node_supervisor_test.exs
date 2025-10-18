@@ -11,6 +11,7 @@ defmodule ScaleGraph.NodeSupervisorTest do
     opts = [
       mode: :production,
       keys: keys, id: id, addr: addr,
+      shard_size: 5,
       # Need to allow many restarts!
       max_restarts: 500,
       max_seconds: 1,

@@ -2,12 +2,14 @@ defmodule ScaleGraph.Node do
   use GenServer
   require Logger
   alias ScaleGraph.RPC
+  alias ScaleGraph.DHT
 
   defstruct [
     id: nil,
     addr: nil,
     keys: nil,
     rpc: nil,
+    dht: nil,
   ]
 
   @doc """
@@ -26,6 +28,7 @@ defmodule ScaleGraph.Node do
     keys = Keyword.fetch!(opts, :keys)
     addr = Keyword.fetch!(opts, :addr)
     id = Keyword.get(opts, :id, Util.key_to_id(keys[:pub]))
+    # FIXME: This creates new atoms even when they aren't needed!
     name = :"node_#{inspect(addr)}"
     opts
       |> Keyword.put_new(:id, id)
@@ -37,12 +40,21 @@ defmodule ScaleGraph.Node do
     GenServer.call(node, {:cmd, :ping, dst}, 500)
   end
 
+  @doc """
+  Specify which node(s) to use for bootstrapping with `bootstrap: nodes`, where
+  `nodes` is a list of one or more `{id, addr}` pairs.
+  """
+  def join(node, opts \\ []) do
+    GenServer.call(node, {:cmd, :join, opts})
+  end
+
   @impl GenServer
   def init(opts) do
     keys = opts[:keys]
     id = opts[:id]
     addr = opts[:addr]
     rpc = opts[:rpc]
+    dht = opts[:dht]
     # Because we accepted an RPC server from the outside, we need to explicitly
     # register this Node process as the handler.
     :ok = RPC.set_handler(rpc, Keyword.get(opts, :name))
@@ -50,7 +62,8 @@ defmodule ScaleGraph.Node do
       id: id,
       addr: addr,
       keys: keys,
-      rpc: rpc
+      rpc: rpc,
+      dht: dht,
     }
     {:ok, state}
   end
@@ -70,10 +83,18 @@ defmodule ScaleGraph.Node do
   end
 
   @impl GenServer
+  def handle_call({:cmd, :join, opts}, caller, state) do
+    result = DHT.join(state.dht, opts)
+    {:reply, result, state}
+  end
+
+  @impl GenServer
   def handle_info({:rpc_request, _msg} = req, state) do
     case RPC.typ(req) do
       :ping ->
-        RPC.respond(state.rpc, req, nil)
+        _handle_ping(state, req)
+      :find_nodes ->
+        _handle_node_lookup(state, req)
 
       _ ->
         Logger.error("Ignoring unexpected RPC: #{inspect(req)}")
@@ -86,6 +107,24 @@ defmodule ScaleGraph.Node do
     # At least this is true for now. Might change in the future.
     Logger.warning("Node is not meant to receive RPC responses, ignoring: #{inspect(rpc)}")
     {:noreply, state}
+  end
+
+  @impl GenServer
+  def handle_info({:update, _node, _stats}, state) do
+    Logger.warning("Node update not implemented, ignoring")
+    {:noreply, state}
+  end
+
+  # Respond to a PING request.
+  defp _handle_ping(state, req) do
+    RPC.respond(state.rpc, req, nil)
+  end
+
+  # Respond to a FIND-NODE request.
+  defp _handle_node_lookup(state, req) do
+    id = RPC.data(req)
+    nodes = DHT.closest_nodes(state.dht, id)
+    RPC.respond(state.rpc, req, nodes)
   end
 
 end

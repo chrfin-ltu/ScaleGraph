@@ -13,9 +13,12 @@ defmodule ScaleGraph.Daemon.Application do
     keys = Crypto.generate_keys()
     id = Util.key_to_id(keys.pub)
     addr = {{127, 1, 1, 1}, 9001}
+    id_bits = 256
+    shard_size = 5
 
     opts = [
       keys: keys, id: id, addr: addr,
+      shard_size: shard_size,
       mode: :production,
       strategy: :one_for_one,
       name: ScaleGraph.Daemon.NodeSupervisor

@@ -21,23 +21,48 @@ defmodule ScaleGraph.NodeSupervisor do
   end
 
   defp init_production(opts) do
-    addr = opts[:addr]
+    addr = Keyword.fetch!(opts, :addr)
+    shard_size = Keyword.fetch!(opts, :shard_size)
+    # Network options
     net_opts = opts
       |> Keyword.put(:name, :network_name)
       |> Keyword.put(:connect, {addr, :rpc_name})
-    node_opts = opts
-      |> Keyword.put(:name, :node_name)
-      |> Keyword.put(:rpc, :rpc_name)
-    netmod = Keyword.get(opts, :net_adapter, Netsim.UDP)
+    # RPC options
+    net_mod = Keyword.get(opts, :net_adapter, Netsim.UDP)
     rpc_opts = opts
       |> Keyword.put(:name, :rpc_name)
       |> Keyword.put(:handler, :node_name)
-      |> Keyword.put(:net, {netmod, :network_name})
+      |> Keyword.put(:net, {net_mod, :network_name})
+    # DHT/RT options
+    rt_opts = opts
+      |> Keyword.put(:name, :rt_name)
+      |> Keyword.put_new(:bucket_size, shard_size)
+    # DHT/Lookup options
+    lookup_opts = opts
+      |> Keyword.put(:rpc, :rpc_name)
+      |> Keyword.put_new(:n_lookup, shard_size)
+      |> Keyword.delete(:name)
+    # DHT options
+    rt_mod = Keyword.get(opts, :routing_table, ScaleGraph.DHT.FakeRT)
+    dht_opts = opts
+      |> Keyword.put(:name, :dht_name)
+      |> Keyword.put(:rpc, :rpc_name)
+      |> Keyword.put(:rt, :rt_name)
+      |> Keyword.put(:rt_mod, rt_mod)
+      |> Keyword.put(:lookup_opts, lookup_opts)
+      # already has shard size
+    # Node options
+    node_opts = opts
+      |> Keyword.put(:name, :node_name)
+      |> Keyword.put(:rpc, :rpc_name)
+
 
     children = [
       # FIXME: only instantiate a UDP network (Fake lives outside!)
-      {netmod, net_opts},
+      {net_mod, net_opts},
       {ScaleGraph.RPC, rpc_opts},
+      {rt_mod, rt_opts},
+      {ScaleGraph.DHT, dht_opts},
       {ScaleGraph.Node, node_opts},
     ]
 
@@ -48,9 +73,13 @@ defmodule ScaleGraph.NodeSupervisor do
     node_opts = opts[:node_opts]
     net_opts = opts[:net_opts]
     rpc_opts = opts[:rpc_opts]
+    rt_opts = opts[:rt_opts]
+    dht_opts = opts[:dht_opts]
 
     children = [
       {ScaleGraph.RPC, rpc_opts},
+      {ScaleGraph.DHT.FakeRT, rt_opts},
+      {ScaleGraph.DHT, dht_opts},
       {ScaleGraph.Node, node_opts},
     ]
 

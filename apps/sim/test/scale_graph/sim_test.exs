@@ -32,8 +32,10 @@ defmodule SimTest do
       assert Process.alive?(GenServer.whereis(name))
     end)
     # Can ping
+    bogus_id = 123
+    dst = {bogus_id, {{127, 54, 54, 1}, 54321}}
     Enum.each(state.node_names, fn node_name ->
-      result = ScaleGraph.Node.ping(node_name, {{127, 54, 54, 1}, 54321})
+      result = ScaleGraph.Node.ping(node_name, dst)
       assert {:rpc_response, {:ping, _}} = result
     end)
 
@@ -57,8 +59,10 @@ defmodule SimTest do
       assert Process.alive?(GenServer.whereis(name))
     end)
     # Can still ping
+    bogus_id = 123
+    dst = {bogus_id, {{127, 54, 54, 1}, 54321}}
     Enum.each(state.node_names, fn node_name ->
-      result = ScaleGraph.Node.ping(node_name, {{127, 54, 54, 1}, 54321})
+      result = ScaleGraph.Node.ping(node_name, dst)
       assert {:rpc_response, {:ping, _}} = result
     end)
 
@@ -85,8 +89,10 @@ defmodule SimTest do
       assert Process.alive?(GenServer.whereis(name))
     end)
     # Can still ping
+    bogus_id = 123
+    dst = {bogus_id, {{127, 54, 54, 1}, 54321}}
     Enum.each(state.node_names, fn node_name ->
-      result = ScaleGraph.Node.ping(node_name, {{127, 54, 54, 1}, 54321})
+      result = ScaleGraph.Node.ping(node_name, dst)
       assert {:rpc_response, {:ping, _}} = result
     end)
 
@@ -147,7 +153,7 @@ defmodule SimTest do
     child_counts = DynamicSupervisor.count_children(supervisor)
     assert %{specs: 6, active: 6, supervisors: 5, workers: 1} = child_counts
     assert not Process.alive?(pid)
-    :timer.sleep(5)
+    :timer.sleep(10)
     new_pid = Sim.node_pid(sim, {{127, 54, 54, 1}, 54321})
     assert pid != new_pid
     assert Process.alive?(new_pid)

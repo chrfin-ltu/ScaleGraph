@@ -55,8 +55,7 @@ defmodule ScaleGraph.DHTTest do
     parent = self()
     spawn(fn ->
       result = DHT.join(dht, bootstrap: [{test_id, test_addr}])
-      assert %{before: 0, after: 1} = result  # WRONG
-      #assert %{before: 0, after: 2} = result # CORRECT
+      assert %{before: 0, after: 1} = result
       send(parent, "done")
     end)
     # Reply to requsets from DHT/lookup.

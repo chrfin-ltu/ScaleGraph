@@ -78,6 +78,14 @@ defmodule ScaleGraph.DHT do
   end
 
   @doc """
+  Update the routing table after receiving a message from `node`.
+  If the node has the same ID as this node, the update is ignored.
+  """
+  def update(dht, node, stats \\ nil) do
+    GenServer.call(dht, {:update, node, stats})
+  end
+
+  @doc """
   Append a new block to the ledger(s).
   """
   @deprecated "not implemented"
@@ -112,10 +120,21 @@ defmodule ScaleGraph.DHT do
   end
 
   @impl GenServer
-  def handle_call({:join, opts}, _caller, state) do
-    bootstraps = opts[:bootstrap]
-    result = _join(state, bootstraps)
-    {:reply, result, state}
+  def handle_call({:update, {id, _addr} = node, _stats}, _caller, state) do
+    if id != state.id do
+      state.rt_mod.update(state.rt, node)
+    end
+    {:reply, :ok, state}
+  end
+
+  @impl GenServer
+  def handle_call({:join, opts}, caller, state) do
+    spawn(fn ->
+      bootstraps = opts[:bootstrap]
+      result = _join(state, bootstraps)
+      GenServer.reply(caller, result)
+    end)
+    {:noreply, state}
   end
 
   @impl GenServer
@@ -137,13 +156,13 @@ defmodule ScaleGraph.DHT do
 
   # TODO: Need to include self in the results.
   defp _node_lookup(state, id) do
-    #candidates = state.rt_mod.closest(state.rt, id)
-    #  |> Enum.map(&Contact.pair/1)
     candidates = _closest_nodes(state, id)
     opts = state.lookup_opts
+      |> Keyword.put(:id, id)
       |> Keyword.put(:target, id)
       |> Keyword.put(:candidates, candidates)
-    NodeLookup.lookup(opts)
+    result = NodeLookup.lookup(opts)
+    result.result
   end
 
   # TODO: Bucket refresh. Needs some more settings/options.

@@ -55,6 +55,7 @@ defmodule ScaleGraph.NodeSupervisor do
     node_opts = opts
       |> Keyword.put(:name, :node_name)
       |> Keyword.put(:rpc, :rpc_name)
+      |> Keyword.put(:dht, :dht_name)
 
 
     children = [

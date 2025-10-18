@@ -18,6 +18,7 @@ defmodule ScaleGraph.Node do
   Required options:
   - `:keys` - a `%{priv: priv, pub: pub}` key pair.
   - `:addr` - an `{ip, port}` pair.
+  - `:dht` - a DHT process.
   """
   def start_link(opts) do
     opts = massage_opts(opts)
@@ -50,21 +51,17 @@ defmodule ScaleGraph.Node do
 
   @impl GenServer
   def init(opts) do
-    keys = opts[:keys]
-    id = opts[:id]
-    addr = opts[:addr]
-    rpc = opts[:rpc]
-    dht = opts[:dht]
+    rpc = Keyword.fetch!(opts, :rpc)
+    state = %__MODULE__{
+      id: Keyword.fetch!(opts, :id),
+      addr: Keyword.fetch!(opts, :addr),
+      keys: Keyword.fetch!(opts, :keys),
+      rpc: rpc,
+      dht: Keyword.fetch!(opts, :dht),
+    }
     # Because we accepted an RPC server from the outside, we need to explicitly
     # register this Node process as the handler.
     :ok = RPC.set_handler(rpc, Keyword.get(opts, :name))
-    state = %__MODULE__{
-      id: id,
-      addr: addr,
-      keys: keys,
-      rpc: rpc,
-      dht: dht,
-    }
     {:ok, state}
   end
 
@@ -84,12 +81,17 @@ defmodule ScaleGraph.Node do
 
   @impl GenServer
   def handle_call({:cmd, :join, opts}, caller, state) do
-    result = DHT.join(state.dht, opts)
-    {:reply, result, state}
+    dht = state.dht
+    spawn(fn ->
+      result = DHT.join(dht, opts)
+      GenServer.reply(caller, result)
+    end)
+    {:noreply, state}
   end
 
   @impl GenServer
   def handle_info({:rpc_request, _msg} = req, state) do
+    DHT.update(state.dht, RPC.src(req))
     case RPC.typ(req) do
       :ping ->
         _handle_ping(state, req)
@@ -110,8 +112,8 @@ defmodule ScaleGraph.Node do
   end
 
   @impl GenServer
-  def handle_info({:update, _node, _stats}, state) do
-    Logger.warning("Node update not implemented, ignoring")
+  def handle_info({:update, {:rpc_response, _} = resp, _stats}, state) do
+    DHT.update(state.dht, RPC.src(resp))
     {:noreply, state}
   end
 

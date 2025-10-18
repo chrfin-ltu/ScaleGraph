@@ -59,9 +59,9 @@ defmodule ScaleGraph.DHT.NodeLookupTest do
     end)
     #
     spawn(fn ->
-      result = NodeLookup.lookup(rpc: rpc1, target: 2345, candidates: candidates, alpha: 2, n_lookup: 3)
-      assert length(result) == 3
-      assert MapSet.new(result) == MapSet.new(candidates)
+      result = NodeLookup.lookup(rpc: rpc1, target: 2345, candidates: candidates, alpha: 2, n_lookup: 3, id: 1234)
+      assert length(result.result) == 3
+      assert MapSet.new(result.result) == MapSet.new(candidates)
       send(parent, "done 1")
     end)
     #
@@ -110,10 +110,10 @@ defmodule ScaleGraph.DHT.NodeLookupTest do
     end)
     #
     spawn(fn ->
-      result = NodeLookup.lookup(rpc: rpc1, target: 2345, candidates: candidates, alpha: 2, n_lookup: 3)
-      assert length(result) == 3
+      result = NodeLookup.lookup(rpc: rpc1, target: 2345, candidates: candidates, alpha: 2, n_lookup: 3, id: 1234)
+      assert length(result.result) == 3
       expected = [{1235, addr2}, {1236, addr3}, {1237, addr4}]
-      assert MapSet.new(result) == MapSet.new(expected)
+      assert MapSet.new(result.result) == MapSet.new(expected)
       send(parent, "done 1")
     end)
     #
@@ -161,8 +161,8 @@ defmodule ScaleGraph.DHT.NodeLookupTest do
     end)
     #
     spawn(fn ->
-      result = NodeLookup.lookup(rpc: rpc1, target: 2345, candidates: candidates, alpha: 2, n_lookup: 3, timeout: 100)
-      assert length(result) == 1
+      result = NodeLookup.lookup(rpc: rpc1, target: 2345, candidates: candidates, alpha: 2, n_lookup: 3, timeout: 100, id: 1234)
+      assert length(result.result) == 1
       send(parent, "done 1")
     end)
     #
@@ -207,7 +207,7 @@ defmodule ScaleGraph.DHT.NodeLookupTest do
     end)
     #
     spawn(fn ->
-      result = NodeLookup.lookup(rpc: rpc1, target: 2345, candidates: candidates, alpha: 2, n_lookup: 3, timeout: 100)
+      result = NodeLookup.lookup(rpc: rpc1, target: 2345, candidates: candidates, alpha: 2, n_lookup: 3, timeout: 100, id: 1234)
       assert length(result) == 2
       assert MapSet.new(result) == MapSet.new([{1235, addr2}, {1236, addr3}])
       send(parent, "done 1")

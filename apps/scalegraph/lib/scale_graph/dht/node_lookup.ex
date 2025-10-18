@@ -5,6 +5,7 @@
 # - Might lookup to not just return the closest found nodes, but also some
 #   stats, such as how many probes were sent etc.
 # - Allow sort/probe order to be specified.
+# - Don't probe self!
 #
 # NOTE: NodeLookup knows nothing about the RT. It just takes an initial pool of
 # candidates and finds new ones by making RPCs.
@@ -26,6 +27,7 @@ defmodule ScaleGraph.DHT.NodeLookup do
   Run lookup.
 
   Required options:
+  - `:id` - the ID of the local node.
   - `:rpc` - the RPC server to use for sending requests.
   - `:n_lookup` - the number of nodes to find.
   - `:target` - the ID to look up.
@@ -42,7 +44,11 @@ defmodule ScaleGraph.DHT.NodeLookup do
 
   @impl GenServer
   def init(opts) do
+    if opts[:timeout] == nil do
+      Logger.warning("Lookup without timeout!")
+    end
     state = %{
+      id: Keyword.fetch!(opts, :id),
       rpc: Keyword.fetch!(opts, :rpc),
       target: Keyword.fetch!(opts, :target),
       candidates: Keyword.fetch!(opts, :candidates),
@@ -62,7 +68,12 @@ defmodule ScaleGraph.DHT.NodeLookup do
     # TODO: Move this check to DHT? (Don't call lookup with empty pool!)
     if length(state.candidates) == 0 do
       Logger.warning("lookup with EMPTY candidate pool")
-      GenServer.reply(caller, [])
+      result = %{
+        probed: [],
+        alive: [],
+        result: [],
+      }
+      GenServer.reply(caller, result)
       {:stop, :normal, state}
     else
       state = Map.put(state, :caller, caller)
@@ -93,7 +104,11 @@ defmodule ScaleGraph.DHT.NodeLookup do
   def handle_info({:rpc_response, _} = resp, state) do
     new_candidates = RPC.data(resp)
     old_set = MapSet.new(state.candidates)
-    new = Enum.filter(new_candidates, &(!MapSet.member?(state.probed, &1) && !MapSet.member?(old_set, &1)))
+    new = Enum.filter(new_candidates, fn {id, _addr} = node ->
+      !MapSet.member?(state.probed, node) &&
+      !MapSet.member?(old_set, node) &&
+      id != state.id
+    end)
     # Maintains candidates in sorted order by (ascending) distance.
     # (This should probably be configurable.)
     new_candidates =
@@ -110,6 +125,11 @@ defmodule ScaleGraph.DHT.NodeLookup do
       result = state.alive
         |> Enum.sort_by(fn {id, _addr} -> Util.distance(id, state.target) end)
         |> Enum.take(state.n_lookup)
+      result = %{
+        probed: state.probed,
+        alive: state.alive,
+        result: result,
+      }
       GenServer.reply(state.caller, result)
       {:stop, :normal, state}
     else

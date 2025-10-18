@@ -18,7 +18,7 @@ defmodule ScaleGraph.NodeSupervisorTest do
       strategy: :one_for_one,
       name: __MODULE__
     ]
-    ScaleGraph.NodeSupervisor.start_link(opts)
+    {:ok, _} = ScaleGraph.NodeSupervisor.start_link(opts)
 
     parent = self()
 
@@ -49,8 +49,8 @@ defmodule ScaleGraph.NodeSupervisorTest do
           if rem(i, 50) == 0 do
             IO.puts("#{i}th ping (before)")
           end
-          msg = ScaleGraph.Node.ping(:node_name, addr)
-          assert {:rpc_response, {:ping, {^addr, ^addr, nil, _id}}} = msg
+          msg = ScaleGraph.Node.ping(:node_name, {i, addr})
+          assert {:rpc_response, {:ping, {{^i, ^addr}, {_, ^addr}, nil, _id}}} = msg
           if rem(i, 50) == 0 do
             IO.puts("#{i}th ping (after)")
           end

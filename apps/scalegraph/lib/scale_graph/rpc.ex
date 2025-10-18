@@ -162,7 +162,7 @@ defmodule ScaleGraph.RPC do
   def handle_cast({:request, typ, dst, data, opts}, state) do
     reply_to = opts[:reply_to]
     timeout = opts[:timeout]
-    rpc = new_request(typ, state.addr, dst, data)
+    rpc = new_request(typ, {state.id, state.addr}, dst, data)
     payload = encode(rpc)
     state.netmod.send(state.net, _addr(dst), payload)
     # Remember the request for later so we can map the response to it.
@@ -240,9 +240,14 @@ defmodule ScaleGraph.RPC do
   defp _handle_response(rpc, state) do
     id = id(rpc)
 
+    # TODO: Do we want to update even when we're not expecting a response?
+    # It is likely a late response.
     case state.expected[id] do
       # TODO: Do something useful with request and timestamp.
       {reply_to, _request, _timestamp} ->
+        if state.handler != nil do
+          _deliver(state.handler, {:update, rpc, "stats placeholder"})
+        end
         _deliver(reply_to, rpc)
 
       nil ->

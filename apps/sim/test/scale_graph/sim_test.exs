@@ -159,4 +159,18 @@ defmodule SimTest do
     assert Process.alive?(new_pid)
   end
 
+  test "joining" do
+    node_count = 5
+    {:ok, sim} = Sim.start_link(node_count: node_count)
+    state = :sys.get_state(sim)
+    Sim.join(sim, [])
+    Enum.each(state.node_names, fn node ->
+      node_state = :sys.get_state(node)
+      dht_state = :sys.get_state(node_state.dht)
+      rt = dht_state.rt
+      rt_mod = dht_state.rt_mod
+      assert rt_mod.size(rt) == node_count - 1
+    end)
+  end
+
 end

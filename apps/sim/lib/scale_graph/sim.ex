@@ -53,6 +53,13 @@ defmodule ScaleGraph.Sim do
   end
 
   @doc """
+  Make all nodes join the network.
+  """
+  def join(sim, opts) do
+    GenServer.call(sim, {:join, opts})
+  end
+
+  @doc """
   Add a new node to the simulation. Accepts options `:keys`, `:id`, and `addr`
   and generates missing values (all are optional).
   """
@@ -170,12 +177,25 @@ defmodule ScaleGraph.Sim do
       network: network_name,
       netmod: Netsim.Fake,
       node_names: node_names,
+      ids: ids,
+      addrs: addrs,
       node_supers: node_supers,
     }
     {:ok, state}
   end
 
   # --- handlers ---
+
+  @impl GenServer
+  def handle_call({:join, _opts}, _caller, state) do
+    [bootstrap | joining] = state.node_names
+    bootstrap = :sys.get_state(bootstrap)
+    bootstrap = {bootstrap.id, bootstrap.addr}
+    Enum.each(joining, fn node ->
+      result = ScaleGraph.Node.join(node, [bootstrap: [bootstrap]])
+    end)
+    {:reply, :ok, state}
+  end
 
   # We need to find a NodeSupervisor using information about a Node.
   # TODO: Ideally, we would even allow a node name to be given, and then find

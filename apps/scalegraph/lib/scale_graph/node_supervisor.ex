@@ -12,70 +12,81 @@ defmodule ScaleGraph.NodeSupervisor do
 
   @impl Supervisor
   def init(opts) do
-    # TODO: should be able to infer mode from options and
-    # massage them appropriately.
-    case opts[:mode] do
-      :production -> init_production(opts)
-      :simulation -> init_simulation(opts)
-    end
-  end
+    default_net_name = :network_name
+    default_rpc_name = :rpc_name
+    default_rt_name = :rt_name
+    default_dht_name = :dht_name
+    default_node_name = :node_name
 
-  defp init_production(opts) do
-    addr = Keyword.fetch!(opts, :addr)
-    shard_size = Keyword.fetch!(opts, :shard_size)
-    # Network options
-    net_opts = opts
-      |> Keyword.put(:name, :network_name)
-      |> Keyword.put(:connect, {addr, :rpc_name})
-    # RPC options
-    net_mod = Keyword.get(opts, :net_adapter, Netsim.UDP)
-    rpc_opts = opts
-      |> Keyword.put(:name, :rpc_name)
-      |> Keyword.put(:handler, :node_name)
-      |> Keyword.put(:net, {net_mod, :network_name})
-    # DHT/RT options
-    rt_opts = opts
-      |> Keyword.put(:name, :rt_name)
-      |> Keyword.put_new(:bucket_size, shard_size)
-    # DHT/Lookup options
-    lookup_opts = opts
-      |> Keyword.put(:rpc, :rpc_name)
-      |> Keyword.put_new(:n_lookup, shard_size)
-      |> Keyword.delete(:name)
-    # DHT options
-    rt_mod = Keyword.get(opts, :routing_table, ScaleGraph.DHT.FakeRT)
-    dht_opts = opts
-      |> Keyword.put(:name, :dht_name)
-      |> Keyword.put(:rpc, :rpc_name)
-      |> Keyword.put(:rt, :rt_name)
-      |> Keyword.put(:rt_mod, rt_mod)
-      |> Keyword.put(:lookup_opts, lookup_opts)
-      # already has shard size
-    # Node options
-    node_opts = opts
-      |> Keyword.put(:name, :node_name)
-      |> Keyword.put(:rpc, :rpc_name)
-      |> Keyword.put(:dht, :dht_name)
+    # Get required options.
+    {keys, opts} = Keyword.pop!(opts, :keys)
+    {addr, opts} = Keyword.pop!(opts, :addr)
+    {shard_size, opts} = Keyword.pop!(opts, :shard_size)
+    # TODO: Why needs id_bits ??
+
+    # Get some options that may fall back on defaults.
+    {id, opts} = Keyword.pop(opts, :id)  # TODO: get from keys if missing
+    {bucket_size, opts} = Keyword.pop(opts, :bucket_size, shard_size)
+    {net_mod, opts} = Keyword.pop(opts, :net_mod, Netsim.UDP)
+    {rt_mod, opts} = Keyword.pop(opts, :rt_mod, ScaleGraph.DHT.FakeRT)
+
+    # Get some options that may fall back on defaults.
+    net_name = opts
+      |> Keyword.get(:net_opts, [])
+      |> Keyword.get(:name, default_net_name)
+    rpc_name = opts
+      |> Keyword.get(:rpc_opts, [])
+      |> Keyword.get(:name, default_rpc_name)
+    rt_name = opts
+      |> Keyword.get(:rt_opts, [])
+      |> Keyword.get(:name, default_rt_name)
+    dht_name = opts
+      |> Keyword.get(:dht_opts, [])
+      |> Keyword.get(:name, default_dht_name)
+    node_name = opts
+      |> Keyword.get(:node_opts, [])
+      |> Keyword.get(:name, default_node_name)
 
 
-    children = [
-      # FIXME: only instantiate a UDP network (Fake lives outside!)
-      {net_mod, net_opts},
-      {ScaleGraph.RPC, rpc_opts},
-      {rt_mod, rt_opts},
-      {ScaleGraph.DHT, dht_opts},
-      {ScaleGraph.Node, node_opts},
-    ]
+    # May or may not have some net opts, which may or may not have a name.
+    {net_opts, opts} = Keyword.pop(opts, :net_opts, [])
+    net_opts = net_opts
+      |> Keyword.put_new(:name, net_name)
+      |> Keyword.put_new(:connect, {addr, rpc_name})
 
-    Supervisor.init(children, opts)
-  end
+    {rpc_opts, opts} = Keyword.pop(opts, :rpc_opts, [])
+    rpc_opts = rpc_opts
+      |> Keyword.put_new(:name, rpc_name)
+      |> Keyword.put_new(:handler, node_name)
+      |> Keyword.put_new(:net, {net_mod, net_name}) # needs mod, create or not!
+      |> Keyword.put_new(:keys, keys)
+      |> Keyword.put_new(:id, id)
+      |> Keyword.put_new(:addr, addr)
 
-  defp init_simulation(opts) do
-    node_opts = opts[:node_opts]
-    net_opts = opts[:net_opts]
-    rpc_opts = opts[:rpc_opts]
-    rt_opts = opts[:rt_opts]
-    dht_opts = opts[:dht_opts]
+    {rt_opts, opts} = Keyword.pop(opts, :rt_opts, [])
+    rt_opts = rt_opts
+      |> Keyword.put_new(:name, rt_name)
+      |> Keyword.put_new(:bucket_size, bucket_size)
+      |> Keyword.put_new(:id, id)
+
+    {dht_opts, opts} = Keyword.pop(opts, :dht_opts, [])
+    dht_opts = dht_opts
+      |> Keyword.put_new(:name, dht_name)
+      |> Keyword.put_new(:rpc, :rpc_name)
+      |> Keyword.put_new(:rt, :rt_name)
+      |> Keyword.put_new(:rt_mod, rt_mod)
+      |> Keyword.put_new(:shard_size, shard_size)
+      |> Keyword.put_new(:id, id)
+    # TODO: What about alpha, max_pool, timeout etc?
+
+    {node_opts, opts} = Keyword.pop(opts, :node_opts, [])
+    node_opts = node_opts
+      |> Keyword.put_new(:name, node_name)
+      |> Keyword.put_new(:rpc, rpc_name)
+      |> Keyword.put_new(:dht, dht_name)
+      |> Keyword.put_new(:keys, keys)
+      |> Keyword.put_new(:id, id)
+      |> Keyword.put_new(:addr, addr)
 
     children = [
       {ScaleGraph.RPC, rpc_opts},
@@ -85,12 +96,11 @@ defmodule ScaleGraph.NodeSupervisor do
     ]
 
     children =
-      if net_opts == nil do
-        children
+      if net_mod == Netsim.UDP do
+        [{net_mod, net_opts} | children]
       else
-        [{net_opts[:mod], net_opts} | children]
+        children
       end
-
     Supervisor.init(children, opts)
   end
 

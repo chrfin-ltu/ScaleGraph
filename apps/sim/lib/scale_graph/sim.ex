@@ -123,28 +123,20 @@ defmodule ScaleGraph.Sim do
         dht_name = _dht_via(sim_id, addr)
         node_name = _node_via(sim_id, addr)
         node_opts = [
-          keys: keys, #
-          id: id,     #
-          addr: addr, #
           rpc: rpc_name,
           dht: dht_name,
           name: node_name,
         ]
         rpc_opts = [
-          keys: keys, #
-          id: id,     #
-          addr: addr, #
           net: {Netsim.Fake, network_name},
           name: rpc_name,
         ]
         rt_opts = [
-          id: id,     #
           id_bits: id_bits,
           bucket_size: shard_size,
           name: rt_name,
         ]
         dht_opts = [
-          id: id,     #
           rpc: rpc_name,
           rt: rt_name,
           rt_mod: ScaleGraph.DHT.FakeRT,
@@ -155,6 +147,11 @@ defmodule ScaleGraph.Sim do
         node_sup_opts = [
           name: _node_sup_via(sim_id, addr),
           mode: :simulation,
+          keys: keys,
+          id: id,
+          addr: addr,
+          net_mod: Netsim.Fake,
+          id_bits: id_bits,
           shard_size: shard_size,
           rpc_opts: rpc_opts,
           rt_opts: rt_opts,

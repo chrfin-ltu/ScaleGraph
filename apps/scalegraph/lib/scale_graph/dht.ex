@@ -103,14 +103,18 @@ defmodule ScaleGraph.DHT do
 
   @impl GenServer
   def init(opts) do
+    id = Keyword.fetch!(opts, :id)
     rpc = Keyword.fetch!(opts, :rpc)
     shard_size = Keyword.fetch!(opts, :shard_size)  # TODO: fallback default?
     lookup_opts = Keyword.get(opts, :lookup_opts, [])
+      |> Keyword.put_new(:id, id)
       |> Keyword.put_new(:rpc, rpc)
       |> Keyword.put_new(:n_lookup, shard_size)
       |> Keyword.put_new(:max_pool, shard_size)
+    # FIXME: If alpha is given, we need to give it to lookup!
+    # What about timeout?
     state = %__MODULE__{
-      id: Keyword.fetch!(opts, :id),
+      id: id,
       rpc: rpc,
       rt_mod: Keyword.fetch!(opts, :rt_mod),
       rt: Keyword.fetch!(opts, :rt),

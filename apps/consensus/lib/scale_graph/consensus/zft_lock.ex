@@ -176,6 +176,7 @@ defmodule ScaleGraph.Consensus.ZftLock do
       :else ->
         nil
     end
+    state = lookup_local_shard(state) # Make sure we use a fresh shard config!
     tx = state.proposing
     proposal = build_proposal(state)
     info(state, "Broadcasting PROPOSE...")
@@ -288,6 +289,16 @@ defmodule ScaleGraph.Consensus.ZftLock do
     q = [{tx, sig} | state.tx_queue] # FIXME: must sort by nonce!
     state = Map.put(state, :tx_queue, q)
     {:noreply, state}
+  end
+
+  defp lookup_local_shard(state) do
+    local_shard = ShardConfig.get(state.config_lookup, state.account.id)
+    local_ids = Enum.map(local_shard, fn {id, _addr} -> id end)
+    id_to_addr = Map.merge(state.id_to_addr, Map.new(local_shard))
+    %{state |
+      local_shard_ids: local_ids,
+      id_to_addr: id_to_addr,
+    }
   end
 
   defp lookup_remote_shard(state, %Transaction{}=tx) do

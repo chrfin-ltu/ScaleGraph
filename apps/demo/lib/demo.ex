@@ -94,49 +94,124 @@ defmodule Demo do
   end
 
   @doc """
-  Reset the network. This will remove all nodes and clients.
+  Start the system using specified settings (if any) and add some number of
+  nodes and clients/accounts. Does nothing if already running.
+
+  To add nodes/accounts to a running system, use `add/1` instead. Or use
+  `setup!/1` to force a setup (effectively equivalent to `reset/1` and
+  `add/1`). To configure parameters and (re)start but **not** add
+  nodes/accounts, use `reset/1` (or just explicitly specify 0 for both).
+
+  The default number of nodes is twice the shard size. The default number of
+  clients is the shard size.
+  By default, the resulting state is shown (calling `show/1`).
+  To suppress, pass `:noshow`, e.g. `setup([:noshow, nodes: 4, accounts: 3])`
+  or `setup nodes: 4, accounts: 3, noshow: true`.
 
   Optional arguments:
-  - `:shard_size` sets the shard size.
-  - `:id_bits` sets the size of IDs (number of bits).
-  """
-  def reset(opts \\ []) do
-    if not is_nil(GenServer.whereis(__MODULE__)) do
-      GenServer.stop(__MODULE__, :normal)
-    end
-    {:ok, _} = start(opts)
-    show()
-  end
+  - `nodes: n` - the number of nodes to add.
+  - `clients: n` or `accounts: n` - the number of clients/accounts to add.
+  - `shard_size: n` sets the shard size.
+  - `id_bits: n` sets the size of IDs (number of bits).
+  - `:noshow` do not `show/1` the system state after setup.
+  - `:noadd` do not `add/1` nodes/accounts -- same as `reset/1`.
+  - `:force` force setup even if running -- same as `setup!/1`.
 
-  # TODO: Should probably warn if there are already nodes/clients.
-  @doc """
-  Add the specified number of nodes and clients/accounts. The default number of
-  nodes is twice the shard size. The default number of clients is the shard
-  size. By default, the resulting state is shown (calling `show/1`).
-  To suppress, pass `:noshow`, e.g. `setup([:noshow, nodes: 4, accounts: 3])`.
-
-  Optional arguments:
-  - `:nodes` the number of nodes to add.
-  - `:clients` or `:accounts` the number of clients/accounts to add.
-  - `:shard_size` sets the shard size **if not already running**.
-  - `:id_bits` sets the size of IDs (number of bits) **if not already running**.
-
-  Simply calls `add_nodes/1` and `add_clients/1`. Note that this means
-  nodes/clients will be added whether or not some already exist!
+  Parameters (i.e. `:shard_size` and `:id_bits`) are handled as in `reset/1`.
   """
   def setup(opts \\ []) do
-    _nop_if_running = start(opts)
-    shard_size = Keyword.get(opts, :shard_size, @default_shard_size)
-    n_nodes = Keyword.get(opts, :nodes) || 2*shard_size
-    n_clients = Keyword.get(opts, :clients) || Keyword.get(opts, :accounts) || shard_size
-    add_nodes(n_nodes)
-    add_clients(n_clients)
-    noshow? = :noshow in opts || Keyword.get(opts, :noshow)
-    unless noshow? do
-      show()
+    opts = _convert_flags(opts)
+    force? = :force in opts || Keyword.get(opts, :force)
+    if running?() and !force? do
+      warn("Already running. To force, use `setup!` instead.")
+      :nop
+    else
+      setup!(opts)
     end
+  end
+
+  @doc """
+  Like `setup/1`, but forces a setup (and reset) even if already running.
+  """
+  def setup!(opts \\ []) do
+    opts = _convert_flags(opts)
+    reset([:noshow | opts])
+    opts = Keyword.merge(_current_params(), opts)
+    unless flag?(opts, :noadd) do
+      shard_size = Keyword.fetch!(opts, :shard_size)
+      n_nodes = Keyword.get(opts, :nodes) || 2*shard_size
+      n_clients = Keyword.get(opts, :clients) || Keyword.get(opts, :accounts) || shard_size
+      _add(nodes: n_nodes, accounts: n_clients)
+    end
+    _default_show(opts)
     :ok
   end
+
+  @doc """
+  Configure parameters and (re)start the network. This will remove all nodes and
+  clients. Current (i.e. previously specified) parameters are used as defaults.
+
+  Optional arguments:
+  - `shard_size: n` sets the shard size.
+  - `id_bits: n` sets the size of IDs (number of bits).
+  - `:noshow` do not `show/1` the system state after reset.
+
+  For example, if `reset shard_size: 3` is followed by `reset id_bits: 64`,
+  then the parameters in effect will be `shard_size = 3` and `id_bits = 64`.
+
+  After a reset, nodes and/or accounts/clients can be added with `add/1`.
+  See also `setup/1`.
+  """
+  def reset(opts \\ []) do
+    opts = _convert_flags(opts)
+    opts =
+      case _current_params() do
+        [] ->
+          opts
+        current ->
+          GenServer.stop(__MODULE__, :normal)
+          Keyword.merge(current, opts)
+      end
+    {:ok, _} = start(opts)
+    _default_show(opts)
+  end
+
+  @doc """
+  Add nodes and/or accounts to a running system. Does nothing if not running.
+  If neither `:nodes` nor `:clients`/`:accounts` is specified, this is a no-op.
+
+  Optional arguments:
+  - `nodes: n` - the number of nodes to add.
+  - `clients: n` or `accounts: n` - the number of clients/accounts to add.
+
+  See also `add_nodes/1` and `add_clients/1`.
+  """
+  def add(opts \\ []) do
+    cond do
+      running?() -> _add(opts)
+      :else ->
+        warn("Not currently running. Do `setup` (or `reset`).")
+        :nop
+    end
+  end
+
+  # Add nodes and/or accounts to a running system.
+  defp _add(opts) do
+    n_nodes = Keyword.get(opts, :nodes, 0)
+    n_clients = Keyword.get(opts, :clients) || Keyword.get(opts, :accounts, 0)
+    if n_nodes > 0 do
+      add_nodes(n_nodes)
+    end
+    if n_clients > 0 do
+      add_clients(n_clients)
+    end
+    if n_nodes > 0 or n_clients > 0 do
+      :ok
+    else
+      :nop
+    end
+  end
+
 
   # TODO: Allow a range or list of nodes to be specified?
   @doc """
@@ -277,6 +352,12 @@ defmodule Demo do
     GenServer.call(__MODULE__, {:dogpile, opts})
   end
 
+  @doc false
+  def running?() do
+    pid = GenServer.whereis(__MODULE__)
+    not is_nil(pid) && Process.alive?(pid)
+  end
+
 
   @impl GenServer
   def handle_call({:add_node, opts}, _caller, state) do
@@ -361,6 +442,7 @@ defmodule Demo do
     {:reply, :ok, state}
   end
 
+  # TODO: Should be able to call with e.g. `show 3` as a shortcut for `show node: 3`?
   @impl GenServer
   def handle_call({:show, opts}, _caller, state) do
     IO.puts("#{map_size(state.nodes_by_index)} nodes, #{map_size(state.clients_by_index)} clients/accounts\n")
@@ -646,6 +728,47 @@ defmodule Demo do
     o4 = Util.rand(10, 99)
     port = Util.rand(1000, 9999)
     {{o1, o2, o3, o4}, port}
+  end
+
+  # do show() unless :noshow flag is set
+  defp _default_show(opts) do
+    noshow? = flag?(opts, :noshow)
+    unless noshow? do
+      show()
+    end
+  end
+
+  # If running, get the current settings as a keyword list, else returns `[]`
+  # as there are no current settings.
+  defp _current_params() do
+    case GenServer.whereis(__MODULE__) do
+      nil -> []
+      pid ->
+        state = :sys.get_state(pid)
+        [
+          shard_size: state.shard_size,
+          id_bits: state.id_bits,
+        ]
+    end
+  end
+
+  defp warn(msg) do
+    IO.puts("#{@orange}#{msg}#{@reset}")
+  end
+
+  defp flag?(opts, flag) do
+    flag in opts || Keyword.get(opts, flag, false)
+  end
+
+  # Convert single atoms (flags) to `{flag: true}` key-value pairs, turning
+  # `opts` into a pure keyword list.
+  defp _convert_flags(opts) do
+    Enum.map(opts, fn kv ->
+      cond do
+        is_atom(kv) -> {kv, true}
+        :else -> kv
+      end
+    end)
   end
 
 end

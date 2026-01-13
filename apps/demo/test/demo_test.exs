@@ -49,17 +49,39 @@ defmodule DemoTest do
     assert map_size(state.clients_by_index) == 13
   end
 
-  test "setup uses shard_size if already running" do
+  test "setup does nothing if already running" do
     Demo.reset()
     state = state()
     shard_size = state.shard_size
     id_bits = state.id_bits
-    Demo.setup([:noshow, id_bits: id_bits + 48, shard_size: shard_size + 13])
+    n_nodes = map_size(state.nodes_by_index)
+    n_clients = map_size(state.clients_by_index)
+    Demo.setup(shard_size: 123, id_bits: 500)
+    # Unchanged
+    assert state.shard_size == shard_size
+    assert state.id_bits == id_bits
+    assert map_size(state.nodes_by_index) == n_nodes
+    assert map_size(state.clients_by_index) == n_clients
+  end
+
+  test "setup! forces a reset if already running" do
+    Demo.reset()
+    pid1 = check_running()
+    Demo.setup!([:noshow])
+    pid2 = check_running()
+    assert pid1 != pid2
+  end
+
+  test "setup! forces setup even if already running" do
+    Demo.reset()
+    state = state()
+    shard_size = state.shard_size
+    id_bits = state.id_bits
+    Demo.setup!([:noshow, id_bits: id_bits + 48, shard_size: shard_size + 13])
     check_running()
     state = state()
-    assert state.shard_size == shard_size  # unchanged
-    assert state.id_bits == id_bits  # unchanged
-    # But shard size was used when adding nodes/clients
+    assert state.shard_size == shard_size + 13
+    assert state.id_bits == id_bits + 48
     assert map_size(state.nodes_by_index) == 2*(shard_size + 13)
     assert map_size(state.clients_by_index) == shard_size + 13
   end
@@ -80,21 +102,6 @@ defmodule DemoTest do
     state = :sys.get_state(Demo)
     assert map_size(state.nodes_by_index) == 7
     assert map_size(state.clients_by_index) == 8
-  end
-
-  test "setup adds nodes and clients even if running" do
-    state = :sys.get_state(Demo)
-    nodes_before = map_size(state.nodes_by_index)
-    clients_before = map_size(state.clients_by_index)
-    # Setup
-    Demo.setup([:noshow, nodes: 7, accounts: 8])
-    state = :sys.get_state(Demo)
-    assert map_size(state.nodes_by_index) == 7 + nodes_before
-    assert map_size(state.clients_by_index) == 8 + clients_before
-    Demo.setup([:noshow, nodes: 4, clients: 2])
-    state = :sys.get_state(Demo)
-    assert map_size(state.nodes_by_index) == 7 + 4 + nodes_before
-    assert map_size(state.clients_by_index) == 8 + 2 + clients_before
   end
 
   test "add node with (hashed) ID" do

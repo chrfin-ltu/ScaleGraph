@@ -24,13 +24,6 @@ defmodule ScaleGraph.Ledger.Transaction do
 
 end
 
-defimpl Hash, for: ScaleGraph.Ledger.Transaction do
-  def hash(tx) do
-    bin = Bin.to_bin(tx)
-    :crypto.hash(:sha256, bin)
-  end
-end
-
 defimpl Bin, for: ScaleGraph.Ledger.Transaction do
   def to_bin(tx) do
     #<<tx.snd::32, tx.rcv::32, tx.amt::8, tx.nce::8>>
